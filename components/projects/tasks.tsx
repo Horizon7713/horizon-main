@@ -391,68 +391,6 @@ const fetchTasks = async () => {
   setTasks((data as Task[]) || [])
 }
 
-  const scheduledTasks = timelineTasks.filter((task) => task.planned_start && task.planned_end)
-
-const timelineStart =
-  scheduledTasks.length > 0
-    ? scheduledTasks
-        .map((task) => new Date(task.planned_start as string).getTime())
-        .reduce((min, value) => Math.min(min, value))
-    : null
-
-const timelineEnd =
-  scheduledTasks.length > 0
-    ? scheduledTasks
-        .map((task) => new Date(task.planned_end as string).getTime())
-        .reduce((max, value) => Math.max(max, value))
-    : null
-
-const timelineSpanDays =
-  timelineStart !== null && timelineEnd !== null
-    ? Math.max(
-        1,
-        Math.ceil((timelineEnd - timelineStart) / (1000 * 60 * 60 * 24)) + 1
-      )
-    : 1
-
-    const timelineDates = (() => {
-  if (timelineStart === null) return []
-
-  const dates: Date[] = []
-  const start = new Date(timelineStart)
-
-  for (let i = 0; i < timelineSpanDays; i++) {
-    const d = new Date(start)
-    d.setDate(start.getDate() + i)
-    dates.push(d)
-  }
-
-  return dates
-})()
-
-const formatDateShort = (date: Date) => {
-  return `${date.getMonth() + 1}/${date.getDate()}`
-}
-
-const getDayOffset = (dateString?: string | null) => {
-  if (!dateString || timelineStart === null) return 0
-  const date = new Date(dateString).getTime()
-  return Math.max(
-    0,
-    Math.floor((date - timelineStart) / (1000 * 60 * 60 * 24))
-  )
-}
-
-const getBarWidthDays = (start?: string | null, end?: string | null) => {
-  if (!start || !end) return 1
-
-  const startTime = new Date(start).getTime()
-  const endTime = new Date(end).getTime()
-
-  const diffDays = Math.floor((endTime - startTime) / (1000 * 60 * 60 * 24)) + 1
-  return Math.max(1, diffDays)
-}
-
   useEffect(() => {
     fetchTasks().finally(() => setLoading(false))
   }, [projectId])
@@ -665,6 +603,72 @@ const timelineTasks = [...filteredTasks].sort((a, b) => {
   if (aStart !== bStart) return aStart.localeCompare(bStart)
   return a.sort_order - b.sort_order
 })
+
+const scheduledTasks = timelineTasks.filter(
+  (task) => task.planned_start && task.planned_end
+)
+
+const timelineStart =
+  scheduledTasks.length > 0
+    ? scheduledTasks
+        .map((task) => new Date(task.planned_start as string).getTime())
+        .reduce((min, value) => Math.min(min, value))
+    : null
+
+const timelineEnd =
+  scheduledTasks.length > 0
+    ? scheduledTasks
+        .map((task) => new Date(task.planned_end as string).getTime())
+        .reduce((max, value) => Math.max(max, value))
+    : null
+
+const timelineSpanDays =
+  timelineStart !== null && timelineEnd !== null
+    ? Math.max(
+        1,
+        Math.ceil((timelineEnd - timelineStart) / (1000 * 60 * 60 * 24)) + 1
+      )
+    : 1
+
+const timelineDates = (() => {
+  if (timelineStart === null) return []
+
+  const dates: Date[] = []
+  const start = new Date(timelineStart)
+
+  for (let i = 0; i < timelineSpanDays; i++) {
+    const d = new Date(start)
+    d.setDate(start.getDate() + i)
+    dates.push(d)
+  }
+
+  return dates
+})()
+
+const formatDateShort = (date: Date) => {
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+const getDayOffset = (dateString?: string | null) => {
+  if (!dateString || timelineStart === null) return 0
+  const date = new Date(dateString).getTime()
+  return Math.max(
+    0,
+    Math.floor((date - timelineStart) / (1000 * 60 * 60 * 24))
+  )
+}
+
+const getBarWidthDays = (start?: string | null, end?: string | null) => {
+  if (!start || !end) return 1
+
+  const startTime = new Date(start).getTime()
+  const endTime = new Date(end).getTime()
+
+  const diffDays =
+    Math.floor((endTime - startTime) / (1000 * 60 * 60 * 24)) + 1
+
+  return Math.max(1, diffDays)
+}
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
