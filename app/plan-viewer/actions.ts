@@ -1,7 +1,9 @@
 'use server'
 
+'use server'
+
 import { createClient } from '@/lib/supabase/server'
-import type { Markup, PageScale } from '@/lib/pdf-viewer-types'
+import type { Markup } from '@/lib/pdf-markup-types'
 import { processEventTriggers } from '@/lib/workflow-engine'
 import {
   appendEvent,
@@ -11,17 +13,29 @@ import {
   reconstructState,
 } from '@/lib/document-event-service'
 
+type PageScale = {
+  pageNumber: number
+  inchesPerPixel: number
+  label?: string
+}
+
 // ============================================================================
 // Auth helper — every action reuses this
 // ============================================================================
 async function authed() {
   const supabase = await createClient()
-  const { data: { user }, error } = await supabase.auth.getUser()
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+
   if (error || !user) throw new Error('Not authenticated')
   return { supabase, user }
 }
 
-type ActionResult<T = undefined> = { success: true; data?: T } | { success: false; error: string }
+type ActionResult<T = undefined> =
+  | { success: true; data?: T }
+  | { success: false; error: string }
 
 // ============================================================================
 // 1. UPLOAD — save PDF metadata to pdf_files table
@@ -33,26 +47,20 @@ export async function savePdfMarkupToDatabase(input: {
   uploadTimestamp: string
 }): Promise<ActionResult<{ id: string }>> {
   try {
-    const { supabase, user } = await authed()
+    const { supabase } = await authed()
     const pdfFileId = crypto.randomUUID()
 
-    // Insert into pdf_files table
-    const { data, error } = await supabase
-      .from('pdf_files')
-      .insert({
-        id: pdfFileId,
-        file_name: input.fileName,
-        file_path: input.blobUrl,
-        file_size_bytes: input.fileSize,
-        uploaded_by: null,
-        created_at: input.uploadTimestamp,
-        updated_at: input.uploadTimestamp,
-        // page_count and project_id can be null initially
-        page_count: null,
-        project_id: null,
-      })
-      .select('id')
-      .single()
+    const { error } = await supabase.from('pdf_files').insert({
+      id: pdfFileId,
+      file_name: input.fileName,
+      file_path: input.blobUrl,
+      file_size_bytes: input.fileSize,
+      uploaded_by: null,
+      created_at: input.uploadTimestamp,
+      updated_at: input.uploadTimestamp,
+      page_count: null,
+      project_id: null,
+    })
 
     if (error) return { success: false, error: error.message }
     return { success: true, data: { id: pdfFileId } }
@@ -65,7 +73,6 @@ export async function savePdfMarkupToDatabase(input: {
 // 2. MARKUP CRUD — incremental, each appends the correct event
 // ============================================================================
 
-/** Create a single markup row + append MARKUP_CREATED event */
 export async function createMarkup(
   documentId: string,
   markup: Markup,
@@ -73,35 +80,39 @@ export async function createMarkup(
   try {
     const { supabase, user } = await authed()
 
-    const { data, error } = await supabase
-      .from('pdf_markups')
-      .insert({
-        id: markup.id,
-        pdf_file_id: documentId,
-        markup_type: markup.type,
-        page_number: markup.pageNumber,
-        markup_data: markup,
-        created_by: user.id,
-        created_at: markup.createdAt || new Date().toISOString(),
-      })
-      .select('id')
-      .single()
+    const createdAt = new Date().toISOString()
+
+    const { error } = await supabase.from('pdf_markups').insert({
+      id: markup.id,
+      pdf_file_id: documentId,
+      markup_type: markup.type,
+      page_number: markup.pageIndex,
+      markup_data: markup,
+      created_by: user.id,
+      created_at: createdAt,
+    })
 
     if (error) return { success: false, error: error.message }
 
-    // Append event + evaluate workflow triggers (non-blocking)
-    appendEvent(documentId, 'MARKUP_CREATED', { markup }, {
-      markupId: markup.id,
-      pageNumber: markup.pageNumber,
-    })
-      .then((seq) => processEventTriggers({
-        seq: seq ?? 0,
-        event_type: 'MARKUP_CREATED',
-        document_id: documentId,
-        page_number: markup.pageNumber,
-        user_id: markup.createdBy ?? null,
-        payload: { markup },
-      }))
+    void appendEvent(
+      documentId,
+      'MARKUP_CREATED',
+      { markup },
+      {
+        markupId: markup.id,
+        pageNumber: markup.pageIndex,
+      },
+    )
+      .then((seq) =>
+        processEventTriggers({
+          seq: seq ?? 0,
+          event_type: 'MARKUP_CREATED',
+          document_id: documentId,
+          page_number: markup.pageIndex,
+          user_id: user.id,
+          payload: { markup },
+        }),
+      )
       .catch(() => {})
 
     return { success: true, data: { id: markup.id } }
@@ -110,15 +121,13 @@ export async function createMarkup(
   }
 }
 
-/** Update a single markup row + append MARKUP_UPDATED event with diff */
 export async function updateMarkup(
   documentId: string,
   markup: Markup,
 ): Promise<ActionResult> {
   try {
-    const { supabase } = await authed()
+    const { supabase, user } = await authed()
 
-    // Fetch previous version for the event payload diff
     const { data: prev } = await supabase
       .from('pdf_markups')
       .select('markup_data')
@@ -129,7 +138,7 @@ export async function updateMarkup(
       .from('pdf_markups')
       .update({
         markup_type: markup.type,
-        page_number: markup.pageNumber,
+        page_number: markup.pageIndex,
         markup_data: markup,
         updated_at: new Date().toISOString(),
       })
@@ -137,22 +146,29 @@ export async function updateMarkup(
 
     if (error) return { success: false, error: error.message }
 
-    appendEvent(documentId, 'MARKUP_UPDATED', {
-      markupId: markup.id,
-      previous: prev?.markup_data ?? null,
-      current: markup,
-    }, {
-      markupId: markup.id,
-      pageNumber: markup.pageNumber,
-    })
-      .then((seq) => processEventTriggers({
-        seq: seq ?? 0,
-        event_type: 'MARKUP_UPDATED',
-        document_id: documentId,
-        page_number: markup.pageNumber,
-        user_id: markup.createdBy ?? null,
-        payload: { previous: prev?.markup_data, current: markup },
-      }))
+    void appendEvent(
+      documentId,
+      'MARKUP_UPDATED',
+      {
+        markupId: markup.id,
+        previous: prev?.markup_data ?? null,
+        current: markup,
+      },
+      {
+        markupId: markup.id,
+        pageNumber: markup.pageIndex,
+      },
+    )
+      .then((seq) =>
+        processEventTriggers({
+          seq: seq ?? 0,
+          event_type: 'MARKUP_UPDATED',
+          document_id: documentId,
+          page_number: markup.pageIndex,
+          user_id: user.id,
+          payload: { previous: prev?.markup_data ?? null, current: markup },
+        }),
+      )
       .catch(() => {})
 
     return { success: true }
@@ -161,7 +177,6 @@ export async function updateMarkup(
   }
 }
 
-/** Delete a single markup row + append MARKUP_DELETED event */
 export async function deleteMarkup(
   documentId: string,
   markupId: string,
@@ -170,36 +185,40 @@ export async function deleteMarkup(
   try {
     const { supabase } = await authed()
 
-    // Fetch before delete for the event payload
     const { data: prev } = await supabase
       .from('pdf_markups')
       .select('markup_data, page_number')
       .eq('id', markupId)
       .single()
 
-    const { error } = await supabase
-      .from('pdf_markups')
-      .delete()
-      .eq('id', markupId)
+    const { error } = await supabase.from('pdf_markups').delete().eq('id', markupId)
 
     if (error) return { success: false, error: error.message }
 
     const pg = pageNumber ?? prev?.page_number ?? undefined
-    appendEvent(documentId, 'MARKUP_DELETED', {
-      markupId,
-      deletedMarkup: prev?.markup_data ?? null,
-    }, {
-      markupId,
-      pageNumber: pg,
-    })
-      .then((seq) => processEventTriggers({
-        seq: seq ?? 0,
-        event_type: 'MARKUP_DELETED',
-        document_id: documentId,
-        page_number: pg ?? null,
-        user_id: null,
-        payload: { markupId, deletedMarkup: prev?.markup_data },
-      }))
+
+    void appendEvent(
+      documentId,
+      'MARKUP_DELETED',
+      {
+        markupId,
+        deletedMarkup: prev?.markup_data ?? null,
+      },
+      {
+        markupId,
+        pageNumber: pg,
+      },
+    )
+      .then((seq) =>
+        processEventTriggers({
+          seq: seq ?? 0,
+          event_type: 'MARKUP_DELETED',
+          document_id: documentId,
+          page_number: pg ?? null,
+          user_id: null,
+          payload: { markupId, deletedMarkup: prev?.markup_data ?? null },
+        }),
+      )
       .catch(() => {})
 
     return { success: true }
@@ -224,7 +243,11 @@ export async function loadMarkups(
       .order('created_at', { ascending: true })
 
     if (error) return { success: false, error: error.message }
-    return { success: true, data: (data ?? []).map((r) => r.markup_data as Markup) }
+
+    return {
+      success: true,
+      data: (data ?? []).map((row) => row.markup_data as Markup),
+    }
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : String(e) }
   }
@@ -240,26 +263,29 @@ export async function savePageScale(
   try {
     const { supabase, user } = await authed()
 
-    const { error } = await supabase
-      .from('page_scales')
-      .upsert(
-        {
-          document_id: documentId,
-          page_number: scale.pageNumber,
-          inches_per_pixel: scale.inchesPerPixel,
-          scale_label: scale.label ?? null,
-          created_by: user.id,
-        },
-        { onConflict: 'document_id,page_number' },
-      )
+    const { error } = await supabase.from('page_scales').upsert(
+      {
+        document_id: documentId,
+        page_number: scale.pageNumber,
+        inches_per_pixel: scale.inchesPerPixel,
+        scale_label: scale.label ?? null,
+        created_by: user.id,
+      },
+      { onConflict: 'document_id,page_number' },
+    )
 
     if (error) return { success: false, error: error.message }
 
-    appendEvent(documentId, 'SCALE_SET', {
-      pageNumber: scale.pageNumber,
-      inchesPerPixel: scale.inchesPerPixel,
-      label: scale.label ?? null,
-    }, { pageNumber: scale.pageNumber }).catch(() => {})
+    void appendEvent(
+      documentId,
+      'SCALE_SET',
+      {
+        pageNumber: scale.pageNumber,
+        inchesPerPixel: scale.inchesPerPixel,
+        label: scale.label ?? null,
+      },
+      { pageNumber: scale.pageNumber },
+    ).catch(() => {})
 
     return { success: true }
   } catch (e) {
@@ -281,10 +307,10 @@ export async function loadPageScales(
 
     if (error) return { success: false, error: error.message }
 
-    const scales: PageScale[] = (data ?? []).map((r) => ({
-      pageNumber: r.page_number,
-      inchesPerPixel: r.inches_per_pixel,
-      label: r.scale_label ?? undefined,
+    const scales: PageScale[] = (data ?? []).map((row) => ({
+      pageNumber: row.page_number,
+      inchesPerPixel: row.inches_per_pixel,
+      label: row.scale_label ?? undefined,
     }))
 
     return { success: true, data: scales }
@@ -296,8 +322,6 @@ export async function loadPageScales(
 // ============================================================================
 // 5. SNAPSHOTS — periodic materialized state
 // ============================================================================
-
-/** Create a snapshot if enough events have accumulated since the last one */
 export async function createSnapshotIfNeeded(
   documentId: string,
   threshold = 50,
@@ -316,13 +340,19 @@ export async function createSnapshotIfNeeded(
       loadPageScales(documentId),
     ])
 
-    await saveSnapshot(
-      documentId,
-      markupsResult.data ?? [],
-      scalesResult.data ?? [],
-      latestSeq,
-      { snapshotReason: 'auto', eventsSinceLastSnapshot: latestSeq - lastSnapSeq },
-    )
+    const markups = markupsResult.success ? markupsResult.data ?? [] : []
+const scales = scalesResult.success ? scalesResult.data ?? [] : []
+
+await saveSnapshot(
+  documentId,
+  markups,
+  scales,
+  latestSeq,
+  {
+    snapshotReason: 'auto',
+    eventsSinceLastSnapshot: latestSeq - lastSnapSeq,
+  },
+)
 
     return { success: true, data: { created: true } }
   } catch (e) {
@@ -330,7 +360,6 @@ export async function createSnapshotIfNeeded(
   }
 }
 
-/** Force-create a snapshot right now */
 export async function createSnapshot(documentId: string): Promise<ActionResult> {
   try {
     const latestSeq = await getLatestSeq(documentId)
@@ -339,13 +368,16 @@ export async function createSnapshot(documentId: string): Promise<ActionResult> 
       loadPageScales(documentId),
     ])
 
-    await saveSnapshot(
-      documentId,
-      markupsResult.data ?? [],
-      scalesResult.data ?? [],
-      latestSeq,
-      { snapshotReason: 'manual' },
-    )
+    const markups = markupsResult.success ? markupsResult.data ?? [] : []
+const scales = scalesResult.success ? scalesResult.data ?? [] : []
+
+await saveSnapshot(
+  documentId,
+  markups,
+  scales,
+  latestSeq,
+  { snapshotReason: 'manual' },
+)
 
     return { success: true }
   } catch (e) {
@@ -368,21 +400,24 @@ export async function getDocumentEvents(documentId: string, afterSeq = 0) {
 // ============================================================================
 // 7. HYDRATION — server action wrappers for the useDocumentState hook
 // ============================================================================
-
-/** Fetch latest snapshot for a document (client-callable server action) */
 export async function fetchLatestSnapshot(documentId: string) {
   try {
-    const snapshot = await (await import('@/lib/document-event-service')).getLatestSnapshot(documentId)
+    const snapshot = await (
+      await import('@/lib/document-event-service')
+    ).getLatestSnapshot(documentId)
+
     return { success: true as const, data: snapshot }
   } catch (e) {
     return { success: false as const, error: e instanceof Error ? e.message : String(e) }
   }
 }
 
-/** Fetch events since a given seq (client-callable server action) */
 export async function fetchEventsSince(documentId: string, afterSeq = 0) {
   try {
-    const events = await (await import('@/lib/document-event-service')).getEventsSince(documentId, afterSeq)
+    const events = await (
+      await import('@/lib/document-event-service')
+    ).getEventsSince(documentId, afterSeq)
+
     return { success: true as const, data: events }
   } catch (e) {
     return { success: false as const, error: e instanceof Error ? e.message : String(e) }
