@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "prebuild": "ts-node scripts/setup-pdf-worker.ts",
+    "prebuild": "node scripts/setup-pdf-worker.js"
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
