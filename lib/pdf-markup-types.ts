@@ -1,5 +1,7 @@
 import type { PdfMarkup } from "./pdf-viewer-types";
 
+export type Markup = PdfMarkup;
+
 export interface MarkupCreateInput {
   type: PdfMarkup["type"];
   pageIndex: number;
