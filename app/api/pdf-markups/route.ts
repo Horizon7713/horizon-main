@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     const markupsToInsert = markups.map((markup: Markup) => ({
       pdf_file_id: pdfFileId,
       markup_type: markup.type,
-      page_number: markup.pageNumber,
+      page_number: markup.pageIndex,
       markup_data: markup,
       user_id: sessionData.session.user.id,
       created_at: new Date().toISOString(),
