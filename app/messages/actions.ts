@@ -1,45 +1,29 @@
 "use server"
 
-import { z } from "zod"
 import { generateObject } from "ai"
+import type { ModelMessage } from "ai"
+import { z } from "zod"
 
-const receiptDataSchema = z.object({
-  total_cost: z.number().optional().default(0).describe("The total cost or total amount on the receipt"),
-  currency: z.string().optional().default("USD").describe("The currency symbol or code (e.g., USD, $)"),
-  merchant: z.string().optional().default("").describe("The merchant or store name"),
-  date: z.string().optional().default("").describe("The date on the receipt"),
+const receiptResultSchema = z.object({
+  total_price: z.number().describe("The final total amount on the receipt"),
+  vendor_name: z.string().describe("The store/business name"),
   items: z
     .array(
       z.object({
-        name: z.string().describe("The item or product name"),
-        quantity: z.number().optional().describe("The quantity purchased"),
-        price: z.number().optional().describe("The price of this item"),
-      }),
+        name: z.string().describe("The item name"),
+        quantity: z.number().optional().describe("The quantity"),
+        price: z.number().optional().describe("The item price"),
+      })
     )
-    .default([])
-    .describe("List of items purchased on the receipt"),
+    .describe("List of items purchased"),
   confidencePercentage: z
     .number()
     .min(0)
     .max(100)
-    .optional()
-    .default(50)
-    .describe(
-      "Your confidence level as a percentage (0-100) in the accuracy of ALL extracted data. 90-100 = all values are clear and certain. 70-89 = most values are clear with minor uncertainty. 50-69 = some values are unclear or partially readable. Below 50 = image quality is poor or values are very uncertain.",
-    ),
+    .describe("Confidence level 0-100"),
   imageQuality: z
     .enum(["good", "poor", "unreadable"])
-    .optional()
-    .default("poor")
-    .describe(
-      "Assessment of the receipt image quality. Good = clear and readable. Poor = blurry or faded but partially readable. Unreadable = too blurry, dark, or damaged to read accurately.",
-    ),
-  uncertainFields: z
-    .array(z.string())
-    .default([])
-    .describe(
-      "List of field names that you are uncertain about due to image quality or unclear text (e.g., 'total_cost', 'item_name', 'prices')",
-    ),
+    .describe("Image quality assessment"),
 })
 
 export async function analyzeReceipt(imageBase64: string, mimeType: string) {
@@ -47,40 +31,37 @@ export async function analyzeReceipt(imageBase64: string, mimeType: string) {
     console.log("[v0] Starting receipt analysis using Vercel AI Gateway...")
     const startTime = Date.now()
 
-    const receiptDataSchema = z.object({
-      total_price: z.number().describe("The final total amount on the receipt"),
-      vendor_name: z.string().describe("The store/business name"),
-      items: z.array(
-        z.object({
-          name: z.string().describe("The item name"),
-          quantity: z.number().optional().describe("The quantity"),
-          price: z.number().optional().describe("The item price"),
-        })
-      ).describe("List of items purchased"),
-      confidencePercentage: z.number().min(0).max(100).describe("Confidence level 0-100"),
-      imageQuality: z.enum(["good", "poor", "unreadable"]).describe("Image quality assessment"),
-    })
+    const imageDataUrl = `data:${mimeType};base64,${imageBase64}`
+
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `You are an expert at extracting structured data from receipt images. Analyze this receipt and extract the total price, vendor name, and all items purchased.
+
+CRITICAL EXTRACTION RULES:
+1. Total Price: Extract ONLY the final "Total" line - never use subtotals, taxes, or discounts
+2. Vendor Name: The business/store name typically at the top
+3. Items: Extract all line items with quantities and prices when available
+4. Confidence: Rate 0-100 where 95-100 = crystal clear, 85-94 = clearly visible, 75-84 = mostly clear, 60-74 = some uncertainty, below 60 = poor image quality
+5. Image Quality: good, poor, or unreadable
+
+Always return valid numbers for total_price and prices. If a field cannot be determined, use sensible defaults.`,
+          },
+          {
+            type: "image",
+            image: imageDataUrl,
+          },
+        ],
+      },
+    ]
 
     const { object } = await generateObject({
       model: "openai/gpt-4o",
-      schema: receiptDataSchema,
-      prompt: `You are an expert at extracting structured data from receipt images. Analyze this receipt and extract the total price, vendor name, and all items purchased.
-
-CRITICAL EXTRACTION RULES:
-1. **Total Price**: Extract ONLY the final "Total" line - never use subtotals, taxes, or discounts
-2. **Vendor Name**: The business/store name typically at the top
-3. **Confidence**: Rate 0-100 where 95-100 = crystal clear, 85-94 = clearly visible, 75-84 = mostly clear, 60-74 = some uncertainty, Below 60 = poor image quality`,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              image: imageBase64,
-            }
-          ]
-        }
-      ]
+      schema: receiptResultSchema,
+      messages,
     })
 
     const elapsedTime = Date.now() - startTime
@@ -114,39 +95,29 @@ export async function analyzeReceiptWithOCR(ocrText: string) {
     console.log("[v0] Analyzing receipt with OCR-extracted text using Vercel AI Gateway...")
     const startTime = Date.now()
 
-    const receiptDataSchema = z.object({
-      total_price: z.number().describe("The final total amount on the receipt"),
-      vendor_name: z.string().describe("The store/business name"),
-      items: z.array(
-        z.object({
-          name: z.string().describe("The item name"),
-          quantity: z.number().optional().describe("The quantity"),
-          price: z.number().optional().describe("The item price"),
-        })
-      ).describe("List of items purchased"),
-      confidencePercentage: z.number().min(0).max(100).describe("Confidence level 0-100"),
-      imageQuality: z.enum(["good", "poor", "unreadable"]).describe("Image quality assessment"),
-    })
+    const messages: ModelMessage[] = [
+      {
+        role: "user",
+        content: `Please extract receipt data from this OCR text:
+
+${ocrText}`,
+      },
+    ]
 
     const { object } = await generateObject({
       model: "openai/gpt-4o",
-      schema: receiptDataSchema,
+      schema: receiptResultSchema,
       system: `You are an expert at extracting structured data from receipt text. Parse OCR-extracted receipt text and extract the total price, vendor name, and all items purchased.
 
 CRITICAL EXTRACTION RULES:
-1. **Total Price**: Extract ONLY the final "Total" line - never use subtotals, taxes, or discounts. Must be a valid number.
-2. **Vendor Name**: The business/store name typically at the top. If not found, return empty string.
-3. **Items**: Extract all line items with quantities and prices when available.
-4. **Confidence**: Rate 0-100 where 95-100 = crystal clear, 85-94 = clearly visible, 75-84 = mostly clear, 60-74 = some uncertainty, Below 60 = poor OCR quality
-5. **Image Quality**: Assess based on OCR text clarity - good if clear and complete, poor if some text is garbled, unreadable if mostly illegible.
+1. Total Price: Extract ONLY the final "Total" line - never use subtotals, taxes, or discounts. Must be a valid number.
+2. Vendor Name: The business/store name typically at the top. If not found, return empty string.
+3. Items: Extract all line items with quantities and prices when available.
+4. Confidence: Rate 0-100 where 95-100 = crystal clear, 85-94 = clearly visible, 75-84 = mostly clear, 60-74 = some uncertainty, below 60 = poor OCR quality
+5. Image Quality: Assess based on OCR text clarity - good if clear and complete, poor if some text is garbled, unreadable if mostly illegible.
 
-Always return valid numbers for total_price and prices. If a field cannot be determined, use sensible defaults (0 for numbers, empty string for text).`,
-      messages: [
-        {
-          role: "user",
-          content: `Please extract receipt data from this OCR text:\n\n${ocrText}`,
-        }
-      ]
+Always return valid numbers for total_price and prices. If a field cannot be determined, use sensible defaults.`,
+      messages,
     })
 
     const elapsedTime = Date.now() - startTime
