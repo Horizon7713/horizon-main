@@ -1,160 +1,241 @@
-'use client'
+"use client";
 
-/**
- * PDF Viewer State Context
- * Manages complex state for PDF viewer including markups, UI state, and collaboration
- */
+import React, { createContext, useContext, useMemo, useReducer } from "react";
+import type {
+  MeasurementCalibration,
+  PdfMarkup,
+  PlanRegion,
+  QrPayload,
+  ViewerSidebarTab,
+  ViewerState,
+  ViewerTool,
+} from "./pdf-viewer-types";
+import { initialViewerState, viewerReducer } from "./tool-state-machine";
 
-import React, { createContext, useContext, useReducer, ReactNode } from 'react'
-import { Markup, DrawingScale, MarkupType, PageScale } from '@/lib/pdf-viewer-types'
-
-export interface PDFViewerContextState {
-  // PDF State
-  pdfFileId: string | null
-  currentPage: number
-  totalPages: number
-  zoom: number
-  panX: number
-  panY: number
-
-  // Markup State
-  markups: Markup[]
-  selectedMarkupId: string | null
-  activeTool: MarkupType | null
-  drawingScale: DrawingScale | null
-  pageScales: PageScale[]
-
-  // UI State
-  activePanel: 'properties' | 'markups' | 'history' | 'comments' | null
-  sidebarWidth: number
-  showToolLabels: boolean
-
-  // Collaboration State
-  activeSessions: Array<{ userId: string; userName: string; currentPage: number }>
-  comments: Record<string, any[]>
-  markupVersions: Record<string, any[]>
+interface PdfViewerContextValue {
+  state: ViewerState;
+  setActiveTool: (tool: ViewerTool) => void;
+  setSidebarTab: (tab: ViewerSidebarTab) => void;
+  setCurrentPage: (pageIndex: number) => void;
+  setPageCount: (pageCount: number) => void;
+  setProjectName: (projectName: string) => void;
+  setFileName: (fileName: string | undefined) => void;
+  setPdfFileId: (pdfFileId: string | undefined) => void;
+  setPdfSource: (payload: { pdfObjectKey?: string; pdfUrl?: string }) => void;
+  setZoom: (zoom: number) => void;
+  setPan: (panX: number, panY: number) => void;
+  setRotation: (rotation: number) => void;
+  openCalibrationDialog: () => void;
+  closeCalibrationDialog: () => void;
+  setCalibration: (calibration: MeasurementCalibration) => void;
+  addMarkup: (markup: PdfMarkup) => void;
+  updateMarkup: (markup: PdfMarkup) => void;
+  deleteMarkup: (markupId: string) => void;
+  setMarkups: (markups: PdfMarkup[]) => void;
+  selectMarkup: (markupId: string) => void;
+  clearSelection: () => void;
+  addRegion: (region: PlanRegion) => void;
+  updateRegion: (region: PlanRegion) => void;
+  deleteRegion: (regionId: string) => void;
+  setRegions: (regions: PlanRegion[]) => void;
+  selectRegion: (regionId: string | undefined) => void;
+  setQrPayloads: (payloads: QrPayload[]) => void;
+  setLeftSidebarOpen: (open: boolean) => void;
+  setRightSidebarOpen: (open: boolean) => void;
 }
 
-export type PDFViewerAction =
-  | { type: 'SET_PDF'; payload: { pdfFileId: string; totalPages: number } }
-  | { type: 'SET_PAGE'; payload: number }
-  | { type: 'SET_ZOOM'; payload: number }
-  | { type: 'SET_PAN'; payload: { x: number; y: number } }
-  | { type: 'ADD_MARKUP'; payload: Markup }
-  | { type: 'UPDATE_MARKUP'; payload: Markup }
-  | { type: 'DELETE_MARKUP'; payload: string }
-  | { type: 'SET_MARKUPS'; payload: Markup[] }
-  | { type: 'SELECT_MARKUP'; payload: string | null }
-  | { type: 'SET_ACTIVE_TOOL'; payload: MarkupType | null }
-  | { type: 'SET_DRAWING_SCALE'; payload: DrawingScale | null }
-  | { type: 'SET_PAGE_SCALE'; payload: PageScale }
-  | { type: 'SET_ACTIVE_PANEL'; payload: 'properties' | 'markups' | 'history' | 'comments' | null }
-  | { type: 'SET_SIDEBAR_WIDTH'; payload: number }
-  | { type: 'UPDATE_ACTIVE_SESSIONS'; payload: any[] }
-  | { type: 'UPDATE_COMMENTS'; payload: { markupId: string; comments: any[] } }
-  | { type: 'UPDATE_MARKUP_VERSIONS'; payload: { markupId: string; versions: any[] } }
+const PdfViewerContext = createContext<PdfViewerContextValue | null>(null);
 
-const initialState: PDFViewerContextState = {
-  pdfFileId: null,
-  currentPage: 1,
-  totalPages: 0,
-  zoom: 1,
-  panX: 0,
-  panY: 0,
-  markups: [],
-  selectedMarkupId: null,
-  activeTool: 'select',
-  drawingScale: null,
-  pageScales: [],
-  activePanel: 'properties',
-  sidebarWidth: 320,
-  showToolLabels: false,
-  activeSessions: [],
-  comments: {},
-  markupVersions: {},
-}
+export function PdfViewerProvider({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [state, dispatch] = useReducer(viewerReducer, initialViewerState);
 
-function pdfViewerReducer(state: PDFViewerContextState, action: PDFViewerAction): PDFViewerContextState {
-  switch (action.type) {
-    case 'SET_PDF':
-      return { ...state, pdfFileId: action.payload.pdfFileId, totalPages: action.payload.totalPages }
-    case 'SET_PAGE':
-      return { ...state, currentPage: action.payload }
-    case 'SET_ZOOM':
-      return { ...state, zoom: action.payload }
-    case 'SET_PAN':
-      return { ...state, panX: action.payload.x, panY: action.payload.y }
-    case 'ADD_MARKUP':
-      return { ...state, markups: [...state.markups, action.payload] }
-    case 'UPDATE_MARKUP':
-      return {
-        ...state,
-        markups: state.markups.map((m) => (m.id === action.payload.id ? action.payload : m)),
-      }
-    case 'DELETE_MARKUP':
-      return {
-        ...state,
-        markups: state.markups.filter((m) => m.id !== action.payload),
-        selectedMarkupId: state.selectedMarkupId === action.payload ? null : state.selectedMarkupId,
-      }
-    case 'SET_MARKUPS':
-      return { ...state, markups: action.payload }
-    case 'SELECT_MARKUP':
-      return { ...state, selectedMarkupId: action.payload }
-    case 'SET_ACTIVE_TOOL':
-      return { ...state, activeTool: action.payload }
-    case 'SET_DRAWING_SCALE':
-      return { ...state, drawingScale: action.payload }
-    case 'SET_PAGE_SCALE': {
-      const existing = state.pageScales.filter((s) => s.pageNumber !== action.payload.pageNumber)
-      return { ...state, pageScales: [...existing, action.payload] }
-    }
-    case 'SET_ACTIVE_PANEL':
-      return { ...state, activePanel: action.payload }
-    case 'SET_SIDEBAR_WIDTH':
-      return { ...state, sidebarWidth: action.payload }
-    case 'UPDATE_ACTIVE_SESSIONS':
-      return { ...state, activeSessions: action.payload }
-    case 'UPDATE_COMMENTS':
-      return {
-        ...state,
-        comments: { ...state.comments, [action.payload.markupId]: action.payload.comments },
-      }
-    case 'UPDATE_MARKUP_VERSIONS':
-      return {
-        ...state,
-        markupVersions: { ...state.markupVersions, [action.payload.markupId]: action.payload.versions },
-      }
-    default:
-      return state
-  }
-}
+  const value = useMemo<PdfViewerContextValue>(
+    () => ({
+      state,
 
-interface PDFViewerContextType {
-  state: PDFViewerContextState
-  dispatch: React.Dispatch<PDFViewerAction>
-}
+      setActiveTool: (tool) => {
+        if (state.ui.activeTool === tool) return;
+        dispatch({ type: "SET_ACTIVE_TOOL", payload: tool });
+      },
 
-const PDFViewerContext = createContext<PDFViewerContextType | undefined>(undefined)
+      setSidebarTab: (tab) => {
+        if (state.ui.activeSidebarTab === tab) return;
+        dispatch({ type: "SET_SIDEBAR_TAB", payload: tab });
+      },
 
-export interface PDFViewerProviderProps {
-  children: ReactNode
-}
+      setCurrentPage: (pageIndex) => {
+        if (state.document.currentPageIndex === pageIndex) return;
+        dispatch({ type: "SET_CURRENT_PAGE", payload: pageIndex });
+      },
 
-export function PDFViewerProvider({ children }: PDFViewerProviderProps) {
-  const [state, dispatch] = useReducer(pdfViewerReducer, initialState)
+      setPageCount: (pageCount) => {
+        if (state.document.pageCount === pageCount) return;
+        dispatch({ type: "SET_PAGE_COUNT", payload: pageCount });
+      },
+
+      setProjectName: (projectName) => {
+        if (state.document.projectName === projectName) return;
+        dispatch({ type: "SET_PROJECT_NAME", payload: projectName });
+      },
+
+      setFileName: (fileName) => {
+        if (state.document.fileName === fileName) return;
+        dispatch({ type: "SET_FILE_NAME", payload: fileName });
+      },
+
+      setPdfFileId: (pdfFileId) => {
+        if (state.document.pdfFileId === pdfFileId) return;
+        dispatch({ type: "SET_PDF_FILE_ID", payload: pdfFileId });
+      },
+
+      setPdfSource: (payload) => {
+        const nextObjectKey = payload.pdfObjectKey;
+        const nextPdfUrl = payload.pdfUrl;
+
+        if (
+          state.document.pdfObjectKey === nextObjectKey &&
+          state.document.pdfUrl === nextPdfUrl
+        ) {
+          return;
+        }
+
+        dispatch({ type: "SET_PDF_SOURCE", payload });
+      },
+
+      setZoom: (zoom) => {
+        if (state.viewport.zoom === zoom) return;
+        dispatch({ type: "SET_ZOOM", payload: zoom });
+      },
+
+      setPan: (panX, panY) => {
+        if (
+          state.viewport.panX === panX &&
+          state.viewport.panY === panY
+        ) {
+          return;
+        }
+
+        dispatch({ type: "SET_PAN", payload: { panX, panY } });
+      },
+
+      setRotation: (rotation) => {
+        if (state.viewport.rotation === rotation) return;
+        dispatch({ type: "SET_ROTATION", payload: rotation });
+      },
+
+      openCalibrationDialog: () => {
+        if (state.ui.isCalibrationDialogOpen) return;
+        dispatch({ type: "OPEN_CALIBRATION_DIALOG" });
+      },
+
+      closeCalibrationDialog: () => {
+        if (!state.ui.isCalibrationDialogOpen) return;
+        dispatch({ type: "CLOSE_CALIBRATION_DIALOG" });
+      },
+
+      setCalibration: (calibration) => {
+        if (state.calibration === calibration) return;
+        dispatch({ type: "SET_CALIBRATION", payload: calibration });
+      },
+
+      addMarkup: (markup) => {
+        dispatch({ type: "ADD_MARKUP", payload: markup });
+      },
+
+      updateMarkup: (markup) => {
+        dispatch({ type: "UPDATE_MARKUP", payload: markup });
+      },
+
+      deleteMarkup: (markupId) => {
+        dispatch({ type: "DELETE_MARKUP", payload: markupId });
+      },
+
+      setMarkups: (markups) => {
+        if (state.markups === markups) return;
+        dispatch({ type: "SET_MARKUPS", payload: markups });
+      },
+
+      selectMarkup: (markupId) => {
+        if (
+          state.selection.selectedMarkupIds.length === 1 &&
+          state.selection.selectedMarkupIds[0] === markupId
+        ) {
+          return;
+        }
+
+        dispatch({ type: "SELECT_MARKUP", payload: markupId });
+      },
+
+      clearSelection: () => {
+        if (
+          state.selection.selectedMarkupIds.length === 0 &&
+          !state.selection.selectedRegionId
+        ) {
+          return;
+        }
+
+        dispatch({ type: "CLEAR_SELECTION" });
+      },
+
+      addRegion: (region) => {
+        dispatch({ type: "ADD_REGION", payload: region });
+      },
+
+      updateRegion: (region) => {
+        dispatch({ type: "UPDATE_REGION", payload: region });
+      },
+
+      deleteRegion: (regionId) => {
+        dispatch({ type: "DELETE_REGION", payload: regionId });
+      },
+
+      setRegions: (regions) => {
+        if (state.regions === regions) return;
+        dispatch({ type: "SET_REGIONS", payload: regions });
+      },
+
+      selectRegion: (regionId) => {
+        if (state.selection.selectedRegionId === regionId) return;
+        dispatch({ type: "SELECT_REGION", payload: regionId });
+      },
+
+      setQrPayloads: (payloads) => {
+        if (state.qrPayloads === payloads) return;
+        dispatch({ type: "SET_QR_PAYLOADS", payload: payloads });
+      },
+
+      setLeftSidebarOpen: (open) => {
+        if (state.ui.leftSidebarOpen === open) return;
+        dispatch({ type: "SET_LEFT_SIDEBAR_OPEN", payload: open });
+      },
+
+      setRightSidebarOpen: (open) => {
+        if (state.ui.rightSidebarOpen === open) return;
+        dispatch({ type: "SET_RIGHT_SIDEBAR_OPEN", payload: open });
+      },
+    }),
+    [state]
+  );
 
   return (
-    <PDFViewerContext.Provider value={{ state, dispatch }}>
+    <PdfViewerContext.Provider value={value}>
       {children}
-    </PDFViewerContext.Provider>
-  )
+    </PdfViewerContext.Provider>
+  );
 }
 
-export function usePDFViewer() {
-  const context = useContext(PDFViewerContext)
+export function usePdfViewer() {
+  const context = useContext(PdfViewerContext);
+
   if (!context) {
-    throw new Error('usePDFViewer must be used within PDFViewerProvider')
+    throw new Error("usePdfViewer must be used within a PdfViewerProvider");
   }
-  return context
+
+  return context;
 }
+
+

@@ -1,42 +1,22 @@
-import type React from "react"
-import type { Metadata } from "next"
-import { Inter, JetBrains_Mono } from "next/font/google"
-import { Analytics } from "@vercel/analytics/next"
-import "./globals.css"
-import { Suspense } from "react"
-import { LayoutWrapper } from "@/components/layout-wrapper"
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-sans",
-  display: "swap",
-})
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-mono",
-  display: "swap",
-})
+import "./globals.css";
+import type { Metadata } from "next";
+import { LayoutWrapper } from "@/components/layout-wrapper";
 
 export const metadata: Metadata = {
-  title: "Horizon - Login",
-  description: "Sign in to your Horizon account",
-  generator: "v0.app",
-}
+  title: "Material Intelligence",
+  description: "Enterprise takeoff and project material intelligence platform",
+};
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode
+  children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="font-sans antialiased">
-        <LayoutWrapper>
-          <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
-        </LayoutWrapper>
-        <Analytics />
+    <html lang="en" className="dark">
+      <body suppressHydrationWarning className="app-shell">
+        <LayoutWrapper>{children}</LayoutWrapper>
       </body>
     </html>
-  )
+  );
 }

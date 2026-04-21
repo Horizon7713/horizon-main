@@ -34,6 +34,11 @@ type Project = {
   users: string[] | null
   company: string | null
   budget: number | null
+  square_feet: number | null
+  bathroom_count: number | null
+  window_count: number | null
+  door_count: number | null
+  cabinet_count: number | null
   created_at: string
   updated_at: string
 }
@@ -356,28 +361,62 @@ export function ProjectManagementClient() {
               <CardHeader>
                 <CardTitle>Project Overview</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Start Date</p>
-                    <p className="font-medium">{formatDate(selectedProject.start_date)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">End Date</p>
-                    <p className="font-medium">{formatDate(selectedProject.end_date)}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Budget</p>
-                    <p className="font-medium">
-                      {selectedProject.budget !== null ? `$${selectedProject.budget.toLocaleString()}` : "N/A"}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground">Team Size</p>
-                    <p className="font-medium">{selectedProject.users?.length || 0} members</p>
-                  </div>
-                </div>
-              </CardContent>
+              
+             <CardContent className="space-y-6">
+  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div>
+      <p className="text-sm text-muted-foreground">Start Date</p>
+      <p className="font-medium">{formatDate(selectedProject.start_date)}</p>
+    </div>
+    <div>
+      <p className="text-sm text-muted-foreground">End Date</p>
+      <p className="font-medium">{formatDate(selectedProject.end_date)}</p>
+    </div>
+    <div>
+      <p className="text-sm text-muted-foreground">Budget</p>
+      <p className="font-medium">
+        {selectedProject.budget !== null ? `$${selectedProject.budget.toLocaleString()}` : "N/A"}
+      </p>
+    </div>
+    <div>
+      <p className="text-sm text-muted-foreground">Team Size</p>
+      <p className="font-medium">{selectedProject.users?.length || 0} members</p>
+    </div>
+  </div>
+
+  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+    <div className="mb-3">
+      <p className="text-sm font-medium text-slate-800">Scheduling Inputs</p>
+      <p className="text-xs text-slate-500">
+        These quantities are used to calculate production-based task durations.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
+      <div>
+        <p className="text-sm text-muted-foreground">Square Feet</p>
+        <p className="font-medium">{selectedProject.square_feet ?? "N/A"}</p>
+      </div>
+      <div>
+        <p className="text-sm text-muted-foreground">Bathrooms</p>
+        <p className="font-medium">{selectedProject.bathroom_count ?? "N/A"}</p>
+      </div>
+      <div>
+        <p className="text-sm text-muted-foreground">Windows</p>
+        <p className="font-medium">{selectedProject.window_count ?? "N/A"}</p>
+      </div>
+      <div>
+        <p className="text-sm text-muted-foreground">Doors</p>
+        <p className="font-medium">{selectedProject.door_count ?? "N/A"}</p>
+      </div>
+      <div>
+        <p className="text-sm text-muted-foreground">Cabinets</p>
+        <p className="font-medium">{selectedProject.cabinet_count ?? "N/A"}</p>
+      </div>
+    </div>
+  </div>
+</CardContent>
+ 
             </Card>
           </TabsContent>
 

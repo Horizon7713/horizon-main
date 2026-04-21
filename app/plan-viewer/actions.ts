@@ -44,7 +44,7 @@ export async function savePdfMarkupToDatabase(input: {
         file_name: input.fileName,
         file_path: input.blobUrl,
         file_size_bytes: input.fileSize,
-        uploaded_by: user.id,
+        uploaded_by: null,
         created_at: input.uploadTimestamp,
         updated_at: input.uploadTimestamp,
         // page_count and project_id can be null initially

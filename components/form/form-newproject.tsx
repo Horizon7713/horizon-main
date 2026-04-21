@@ -9,7 +9,16 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { CheckIcon, XIcon, ChevronDownIcon } from "lucide-react"
+import {
+  CheckIcon,
+  XIcon,
+  ChevronDownIcon,
+  Building2,
+  CalendarDays,
+  DollarSign,
+  Users,
+  Ruler,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
 
@@ -25,27 +34,66 @@ interface FormNewProjectProps {
   onSuccess?: () => void
   onCancel?: () => void
   createProject: (data: {
-  name: string
-  status: string
-  startDate: string
-  endDate: string
-  users: string[]
-  company: string
-  budget?: number
-  projectType: string
-}) => Promise<{ success: boolean; error?: string }>
+    name: string
+    status: string
+    startDate: string
+    endDate: string
+    users: string[]
+    company: string
+    budget?: number
+    projectType: string
+    squareFeet?: number
+    bathroomCount?: number
+    windowCount?: number
+    doorCount?: number
+    cabinetCount?: number
+  }) => Promise<{ success: boolean; error?: string }>
+}
+
+function SectionHeader({
+  icon: Icon,
+  eyebrow,
+  title,
+  subtitle,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  eyebrow: string
+  title: string
+  subtitle: string
+}) {
+  return (
+    <div className="mb-4 flex items-start gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
+        <Icon className="h-4 w-4 text-zinc-300" />
+      </div>
+
+      <div>
+        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+          {eyebrow}
+        </div>
+        <div className="mt-1 text-sm font-semibold text-zinc-100">{title}</div>
+        <div className="mt-1 text-xs text-zinc-500">{subtitle}</div>
+      </div>
+    </div>
+  )
 }
 
 export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewProjectProps) {
   const [formData, setFormData] = useState({
-  name: "",
-  status: "active",
-  startDate: "",
-  endDate: "",
-  company: "",
-  budget: "",
-  projectType: "new_construction",
-})
+    name: "",
+    status: "active",
+    startDate: "",
+    endDate: "",
+    company: "",
+    budget: "",
+    projectType: "new_construction",
+    squareFeet: "",
+    bathroomCount: "",
+    windowCount: "",
+    doorCount: "",
+    cabinetCount: "",
+  })
+
   const [users, setUsers] = useState<User[]>([])
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
   const [open, setOpen] = useState(false)
@@ -77,7 +125,9 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
   }, [])
 
   const toggleUser = (userId: string) => {
-    setSelectedUserIds((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]))
+    setSelectedUserIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
+    )
   }
 
   const removeUser = (userId: string) => {
@@ -93,18 +143,22 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
 
     try {
       const result = await createProject({
-  name: formData.name,
-  status: formData.status,
-  startDate: formData.startDate,
-  endDate: formData.endDate,
-  users: selectedUserIds,
-  company: formData.company,
-  budget: formData.budget ? Number.parseFloat(formData.budget) : undefined,
-  projectType: formData.projectType,
-})
+        name: formData.name,
+        status: formData.status,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        users: selectedUserIds,
+        company: formData.company,
+        budget: formData.budget ? Number.parseFloat(formData.budget) : undefined,
+        projectType: formData.projectType,
+        squareFeet: formData.squareFeet ? Number.parseFloat(formData.squareFeet) : undefined,
+        bathroomCount: formData.bathroomCount ? Number.parseInt(formData.bathroomCount, 10) : undefined,
+        windowCount: formData.windowCount ? Number.parseInt(formData.windowCount, 10) : undefined,
+        doorCount: formData.doorCount ? Number.parseInt(formData.doorCount, 10) : undefined,
+        cabinetCount: formData.cabinetCount ? Number.parseInt(formData.cabinetCount, 10) : undefined,
+      })
 
       if (result.success) {
-        // Reset form
         setFormData({
           name: "",
           status: "active",
@@ -112,6 +166,12 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
           endDate: "",
           company: "",
           budget: "",
+          projectType: "new_construction",
+          squareFeet: "",
+          bathroomCount: "",
+          windowCount: "",
+          doorCount: "",
+          cabinetCount: "",
         })
         setSelectedUserIds([])
         onSuccess?.()
@@ -125,191 +185,356 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
     }
   }
 
+  const inputClassName =
+    "h-11 rounded-xl border-zinc-800 bg-black text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-zinc-700"
+
+  const triggerClassName =
+    "h-11 w-full rounded-xl border-zinc-800 bg-black text-zinc-100"
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {error && (
-        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm">
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error ? (
+        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
           {error}
         </div>
-      )}
+      ) : null}
 
-      <div className="space-y-2">
-        <Label htmlFor="name">Project Name</Label>
-        <div className="space-y-2">
-  <Label htmlFor="projectType">Project Type</Label>
-  <Select
-    value={formData.projectType}
-    onValueChange={(value) => setFormData({ ...formData, projectType: value })}
-  >
-    <SelectTrigger id="projectType" className="w-full">
-      <SelectValue placeholder="Select project type" />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="new_construction">New Construction</SelectItem>
-      <SelectItem value="remodel">Remodel</SelectItem>
-      <SelectItem value="addition">Addition</SelectItem>
-      <SelectItem value="detached_garage">Detached Garage</SelectItem>
-      <SelectItem value="tenant_improvement">Tenant Improvement</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-        <Input
-          id="name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          placeholder="Enter project name"
-          required
+      <div className="rounded-2xl border border-zinc-800 bg-black p-4">
+        <SectionHeader
+          icon={Building2}
+          eyebrow="Project Core"
+          title="Primary Project Details"
+          subtitle="Define the project type, schedule window, owner company, and budget baseline."
         />
-      </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="status">Status</Label>
-        <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
-          <SelectTrigger id="status" className="w-full">
-            <SelectValue placeholder="Select status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="on-hold">On Hold</SelectItem>
-            <SelectItem value="completed">Completed</SelectItem>
-            <SelectItem value="cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="startDate">Start Date</Label>
-          <Input
-            id="startDate"
-            type="date"
-            value={formData.startDate}
-            onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-            required
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="endDate">End Date</Label>
-          <Input
-            id="endDate"
-            type="date"
-            value={formData.endDate}
-            onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="company">Company</Label>
-        <Input
-          id="company"
-          value={formData.company}
-          onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-          placeholder="Enter company name"
-          required
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="budget">Budget (Optional)</Label>
-        <Input
-          id="budget"
-          type="number"
-          step="0.01"
-          min="0"
-          value={formData.budget}
-          onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
-          placeholder="Enter project budget"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <Label>Assign Users</Label>
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={open}
-              className="w-full justify-between h-auto min-h-9 bg-transparent"
-              type="button"
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="projectType" className="text-zinc-300">
+              Project Type
+            </Label>
+            <Select
+              value={formData.projectType}
+              onValueChange={(value) => setFormData({ ...formData, projectType: value })}
             >
-              <span className="truncate">
-                {selectedUserIds.length === 0
-                  ? "Select users..."
-                  : `${selectedUserIds.length} user${selectedUserIds.length > 1 ? "s" : ""} selected`}
-              </span>
-              <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-full p-0" align="start">
-            <Command>
-              <CommandInput placeholder="Search users..." />
-              <CommandList>
-                <CommandEmpty>{loadingUsers ? "Loading users..." : "No users found."}</CommandEmpty>
-                <CommandGroup>
-                  {users.map((user) => (
-                    <CommandItem
-                      key={user.id}
-                      value={`${user.first_name} ${user.last_name} ${user.email}`}
-                      onSelect={() => toggleUser(user.id)}
-                    >
-                      <div
-                        className={cn(
-                          "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-primary",
-                          selectedUserIds.includes(user.id)
-                            ? "bg-primary text-primary-foreground"
-                            : "opacity-50 [&_svg]:invisible",
-                        )}
-                      >
-                        <CheckIcon className="h-4 w-4" />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-sm">
-                          {user.first_name} {user.last_name}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{user.email}</span>
-                      </div>
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
-        </Popover>
-
-        {selectedUsers.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {selectedUsers.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center gap-1 px-2 py-1 bg-primary/10 text-primary rounded-md text-sm"
-              >
-                <span>
-                  {user.first_name} {user.last_name}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => removeUser(user.id)}
-                  className="hover:bg-primary/20 rounded-sm p-0.5"
-                >
-                  <XIcon className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
+              <SelectTrigger id="projectType" className={triggerClassName}>
+                <SelectValue placeholder="Select project type" />
+              </SelectTrigger>
+              <SelectContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
+                <SelectItem value="new_construction">New Construction</SelectItem>
+                <SelectItem value="remodel">Remodel</SelectItem>
+                <SelectItem value="addition">Addition</SelectItem>
+                <SelectItem value="detached_garage">Detached Garage</SelectItem>
+                <SelectItem value="tenant_improvement">Tenant Improvement</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-        )}
+
+          <div className="space-y-2">
+            <Label htmlFor="status" className="text-zinc-300">
+              Status
+            </Label>
+            <Select
+              value={formData.status}
+              onValueChange={(value) => setFormData({ ...formData, status: value })}
+            >
+              <SelectTrigger id="status" className={triggerClassName}>
+                <SelectValue placeholder="Select status" />
+              </SelectTrigger>
+              <SelectContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="on-hold">On Hold</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="name" className="text-zinc-300">
+              Project Name
+            </Label>
+            <Input
+              id="name"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              placeholder="Enter project name"
+              required
+              className={inputClassName}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="company" className="text-zinc-300">
+              Company
+            </Label>
+            <Input
+              id="company"
+              value={formData.company}
+              onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+              placeholder="Enter company name"
+              required
+              className={inputClassName}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="budget" className="text-zinc-300">
+              Budget
+            </Label>
+            <div className="relative">
+              <DollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                id="budget"
+                type="number"
+                step="0.01"
+                min="0"
+                value={formData.budget}
+                onChange={(e) => setFormData({ ...formData, budget: e.target.value })}
+                placeholder="Enter project budget"
+                className={`${inputClassName} pl-9`}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="startDate" className="text-zinc-300">
+              Start Date
+            </Label>
+            <div className="relative">
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                id="startDate"
+                type="date"
+                value={formData.startDate}
+                onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                required
+                className={`${inputClassName} pl-9`}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="endDate" className="text-zinc-300">
+              End Date
+            </Label>
+            <div className="relative">
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Input
+                id="endDate"
+                type="date"
+                value={formData.endDate}
+                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                required
+                className={`${inputClassName} pl-9`}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="flex gap-2 justify-end pt-4">
-        {onCancel && (
-          <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+      <div className="rounded-2xl border border-zinc-800 bg-black p-4">
+        <SectionHeader
+          icon={Ruler}
+          eyebrow="Scheduling Inputs"
+          title="Project Quantity Inputs"
+          subtitle="Use construction quantities to support more accurate schedule and scope setup."
+        />
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-2">
+            <Label htmlFor="squareFeet" className="text-zinc-300">
+              Square Feet
+            </Label>
+            <Input
+              id="squareFeet"
+              type="number"
+              min="0"
+              step="0.01"
+              value={formData.squareFeet}
+              onChange={(e) => setFormData({ ...formData, squareFeet: e.target.value })}
+              placeholder="e.g. 2400"
+              className={inputClassName}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="bathroomCount" className="text-zinc-300">
+              Bathrooms
+            </Label>
+            <Input
+              id="bathroomCount"
+              type="number"
+              min="0"
+              step="1"
+              value={formData.bathroomCount}
+              onChange={(e) => setFormData({ ...formData, bathroomCount: e.target.value })}
+              placeholder="e.g. 3"
+              className={inputClassName}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="windowCount" className="text-zinc-300">
+              Windows
+            </Label>
+            <Input
+              id="windowCount"
+              type="number"
+              min="0"
+              step="1"
+              value={formData.windowCount}
+              onChange={(e) => setFormData({ ...formData, windowCount: e.target.value })}
+              placeholder="e.g. 18"
+              className={inputClassName}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="doorCount" className="text-zinc-300">
+              Doors
+            </Label>
+            <Input
+              id="doorCount"
+              type="number"
+              min="0"
+              step="1"
+              value={formData.doorCount}
+              onChange={(e) => setFormData({ ...formData, doorCount: e.target.value })}
+              placeholder="e.g. 14"
+              className={inputClassName}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="cabinetCount" className="text-zinc-300">
+              Cabinets
+            </Label>
+            <Input
+              id="cabinetCount"
+              type="number"
+              min="0"
+              step="1"
+              value={formData.cabinetCount}
+              onChange={(e) => setFormData({ ...formData, cabinetCount: e.target.value })}
+              placeholder="e.g. 22"
+              className={inputClassName}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-zinc-800 bg-black p-4">
+        <SectionHeader
+          icon={Users}
+          eyebrow="Assignments"
+          title="Assign Project Users"
+          subtitle="Select users to add to the project workspace and activate collaboration access."
+        />
+
+        <div className="space-y-2">
+          <Label className="text-zinc-300">Users</Label>
+
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={open}
+                className="h-auto min-h-11 w-full justify-between rounded-xl border-zinc-800 bg-black text-zinc-100 hover:border-zinc-700 hover:bg-zinc-950"
+                type="button"
+              >
+                <span className="truncate">
+                  {selectedUserIds.length === 0
+                    ? "Select users..."
+                    : `${selectedUserIds.length} user${selectedUserIds.length > 1 ? "s" : ""} selected`}
+                </span>
+                <ChevronDownIcon className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+
+            <PopoverContent
+              className="w-[var(--radix-popover-trigger-width)] border-zinc-800 bg-zinc-950 p-0 text-zinc-100"
+              align="start"
+            >
+              <Command className="bg-zinc-950 text-zinc-100">
+                <CommandInput placeholder="Search users..." className="border-zinc-800" />
+                <CommandList>
+                  <CommandEmpty>{loadingUsers ? "Loading users..." : "No users found."}</CommandEmpty>
+                  <CommandGroup>
+                    {users.map((user) => (
+                      <CommandItem
+                        key={user.id}
+                        value={`${user.first_name} ${user.last_name} ${user.email}`}
+                        onSelect={() => toggleUser(user.id)}
+                        className="aria-selected:bg-zinc-900 aria-selected:text-zinc-100"
+                      >
+                        <div
+                          className={cn(
+                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-zinc-700",
+                            selectedUserIds.includes(user.id)
+                              ? "bg-zinc-100 text-zinc-950"
+                              : "opacity-50 [&_svg]:invisible",
+                          )}
+                        >
+                          <CheckIcon className="h-4 w-4" />
+                        </div>
+
+                        <div className="flex flex-col">
+                          <span className="text-sm">
+                            {user.first_name} {user.last_name}
+                          </span>
+                          <span className="text-xs text-zinc-500">{user.email}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+
+          {selectedUsers.length > 0 ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {selectedUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200"
+                >
+                  <span>
+                    {user.first_name} {user.last_name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeUser(user.id)}
+                    className="rounded-sm p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                  >
+                    <XIcon className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        {onCancel ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+            className="border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100"
+          >
             Cancel
           </Button>
-        )}
-        <Button type="submit" disabled={loading}>
+        ) : null}
+
+        <Button
+          type="submit"
+          disabled={loading}
+          className="border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800"
+        >
           {loading ? "Creating..." : "Create Project"}
         </Button>
       </div>

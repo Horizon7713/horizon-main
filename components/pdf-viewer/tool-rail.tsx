@@ -1,99 +1,125 @@
-'use client'
+"use client";
 
-import { MarkupType } from '@/lib/pdf-viewer-types'
-import { Button } from '@/components/ui/button'
-import {
-  Pointer,
-  Minus,
-  Square,
-  Circle,
-  Type,
-  Pen,
-  Download,
-  Plus,
-  Trash2,
-  Ruler,
-  Maximize2,
-  ScalingIcon,
-} from 'lucide-react'
-import { cn } from '@/lib/utils'
+import React from "react";
+import type { ViewerTool } from "@/lib/pdf-viewer-types";
 
 interface ToolRailProps {
-  activeTool: MarkupType | null
-  onToolSelect: (tool: MarkupType) => void
-  onClear: () => void
-  onExport: () => void
-  onAddPDF?: () => void
+  activeTool?: ViewerTool;
+  onToolChange?: (tool: ViewerTool) => void;
 }
 
-const tools: Array<{ tool: MarkupType; icon: React.ReactNode; label: string }> = [
-  { tool: 'select', icon: <Pointer className="w-5 h-5" />, label: 'Select' },
-  { tool: 'line', icon: <Minus className="w-5 h-5" />, label: 'Line' },
-  { tool: 'rectangle', icon: <Square className="w-5 h-5" />, label: 'Rectangle' },
-  { tool: 'ellipse', icon: <Circle className="w-5 h-5" />, label: 'Ellipse' },
-  { tool: 'text', icon: <Type className="w-5 h-5" />, label: 'Text' },
-  { tool: 'polyline', icon: <Pen className="w-5 h-5" />, label: 'Polyline' },
-  { tool: 'distance', icon: <Ruler className="w-5 h-5" />, label: 'Distance' },
-  { tool: 'area', icon: <Maximize2 className="w-5 h-5" />, label: 'Area' },
-  { tool: 'calibrate', icon: <ScalingIcon className="w-5 h-5" />, label: 'Calibrate Scale' },
-]
+const TOOL_GROUPS: Array<{
+  title: string;
+  tools: Array<{ key: ViewerTool; label: string; hint: string }>;
+}> = [
+  {
+    title: "Navigate",
+    tools: [
+      { key: "select", label: "Select", hint: "Select zones and markups" },
+      { key: "pan", label: "Pan", hint: "Move around the page" },
+    ],
+  },
+  {
+    title: "Zones",
+    tools: [
+      {
+        key: "region-rectangle",
+        label: "Scope Zone",
+        hint: "Click points to trace a zone and snap closed",
+      },
+    ],
+  },
+  {
+    title: "Takeoff",
+    tools: [
+      {
+        key: "rectangle",
+        label: "Item Box",
+        hint: "Drag a takeoff item box",
+      },
+      {
+        key: "measure-length",
+        label: "Length",
+        hint: "Measure a calibrated length",
+      },
+      {
+        key: "measure-area",
+        label: "Area",
+        hint: "Drag a calibrated area box",
+      },
+      {
+        key: "measure-count",
+        label: "Count",
+        hint: "Drop count markers",
+      },
+      {
+        key: "calibrate",
+        label: "Scale",
+        hint: "Pick a known dimension and set scale",
+      },
+    ],
+  },
+  {
+    title: "Markup",
+    tools: [
+      { key: "arrow", label: "Arrow", hint: "Directional callout" },
+      { key: "text", label: "Text", hint: "Add a text note" },
+      { key: "ellipse", label: "Ellipse", hint: "Ellipse markup" },
+    ],
+  },
+];
 
-export function ToolRail({ activeTool, onToolSelect, onClear, onExport, onAddPDF }: ToolRailProps) {
+export function ToolRail({
+  activeTool = "select",
+  onToolChange,
+}: ToolRailProps) {
   return (
-    <div className="flex flex-col h-full bg-background border-r border-border p-2 gap-2">
-      <div className="flex flex-col gap-1">
-        {tools.map(({ tool, icon, label }) => (
-          <Button
-            key={tool}
-            variant="ghost"
-            size="icon"
-            onClick={() => onToolSelect(tool)}
-            className={cn(
-              'h-10 w-10 p-0 rounded-md transition-colors',
-              activeTool === tool && 'bg-primary text-primary-foreground hover:bg-primary'
-            )}
-            title={label}
-          >
-            {icon}
-          </Button>
-        ))}
+    <div className="flex h-full w-[96px] flex-col border-r border-zinc-800 bg-zinc-950 text-zinc-100">
+      <div className="border-b border-zinc-800 px-3 py-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-400">
+          Tools
+        </div>
       </div>
 
-      <div className="flex-1" />
+      <div className="flex-1 overflow-y-auto px-2 py-3">
+        <div className="space-y-4">
+          {TOOL_GROUPS.map((group) => (
+            <section key={group.title} className="space-y-2">
+              <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+                {group.title}
+              </div>
 
-      <div className="flex flex-col gap-1 border-t border-border pt-2">
-        {onAddPDF && (
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onAddPDF}
-            className="h-10 w-10 p-0 rounded-md hover:bg-muted"
-            title="Add PDF"
-          >
-            <Plus className="w-5 h-5" />
-          </Button>
-        )}
+              <div className="space-y-1">
+                {group.tools.map((tool) => {
+                  const isActive = activeTool === tool.key;
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onExport}
-          className="h-10 w-10 p-0 rounded-md hover:bg-muted"
-          title="Export Markups"
-        >
-          <Download className="w-5 h-5" />
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClear}
-          className="h-10 w-10 p-0 rounded-md hover:bg-destructive hover:text-destructive-foreground"
-          title="Clear All"
-        >
-          <Trash2 className="w-5 h-5" />
-        </Button>
+                  return (
+                    <button
+                      key={tool.key}
+                      type="button"
+                      onClick={() => onToolChange?.(tool.key)}
+                      title={tool.hint}
+                      className={[
+                        "group flex w-full flex-col rounded-xl border px-2 py-2 text-left transition-all",
+                        isActive
+                          ? "border-blue-500 bg-blue-500/15 text-blue-100 shadow-[0_0_0_1px_rgba(59,130,246,0.35)]"
+                          : "border-zinc-800 bg-zinc-900/80 text-zinc-200 hover:border-zinc-700 hover:bg-zinc-900",
+                      ].join(" ")}
+                    >
+                      <span className="text-[11px] font-semibold leading-none">
+                        {tool.label}
+                      </span>
+                      <span className="mt-1 text-[9px] leading-tight text-zinc-400 group-hover:text-zinc-300">
+                        {tool.hint}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
-  )
+  );
 }

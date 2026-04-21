@@ -1,10 +1,15 @@
-import { GoTrueClient } from '@supabase/supabase-js'
+import { GoTrueClient, createClient } from "@supabase/supabase-js";
 
-// Singleton GoTrueClient instance
-// Prevents "Multiple GoTrueClient instances detected" warnings
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+
+// Full Supabase client for auth + database
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Optional dedicated auth client if you still need it elsewhere
 export const authClient = new GoTrueClient({
-  url: `${process.env.NEXT_PUBLIC_SUPABASE_URL}/auth/v1`,
+  url: `${supabaseUrl}/auth/v1`,
   headers: {
-    apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    apikey: supabaseAnonKey,
   },
-})
+});

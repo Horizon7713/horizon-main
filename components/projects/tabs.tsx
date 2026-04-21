@@ -1,6 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+import {
+  ClipboardList,
+  Receipt,
+  Clock3,
+  ImageIcon,
+  Users,
+  ChevronRight,
+} from "lucide-react"
 import { supabase } from "@/lib/supabase/client"
 import { Table } from "./table"
 import { ProjectTasks } from "./tasks"
@@ -23,6 +31,11 @@ interface Task {
   assigned_to: string | null
   sort_order: number
   created_at: string
+  priority?: string
+  assignee?: {
+    first_name: string
+    last_name: string
+  } | null
   [key: string]: unknown
 }
 
@@ -76,6 +89,59 @@ interface ProjectUser {
   }
 }
 
+function tabIcon(tab: TabType) {
+  switch (tab) {
+    case "tasks":
+      return ClipboardList
+    case "receipts":
+      return Receipt
+    case "timecards":
+      return Clock3
+    case "media":
+      return ImageIcon
+    case "users":
+      return Users
+    default:
+      return ClipboardList
+  }
+}
+
+function statusPill(value: string, kind: "task" | "userRole" | "userStatus") {
+  const v = value?.toLowerCase?.() || ""
+
+  if (kind === "task") {
+    const classes: Record<string, string> = {
+      pending: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+      in_progress: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+      completed: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+      not_started: "border-zinc-700 bg-zinc-900 text-zinc-300",
+    }
+    return classes[v] || "border-zinc-700 bg-zinc-900 text-zinc-300"
+  }
+
+  if (kind === "userRole") {
+    const classes: Record<string, string> = {
+      owner: "border-purple-500/20 bg-purple-500/10 text-purple-200",
+      admin: "border-red-500/20 bg-red-500/10 text-red-200",
+      editor: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+      viewer: "border-zinc-700 bg-zinc-900 text-zinc-300",
+      contractor: "border-blue-500/20 bg-blue-500/10 text-blue-200",
+      subcontractor: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+      homeowner: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+      employee: "border-zinc-700 bg-zinc-900 text-zinc-300",
+      member: "border-zinc-700 bg-zinc-900 text-zinc-300",
+    }
+    return classes[v] || "border-zinc-700 bg-zinc-900 text-zinc-300"
+  }
+
+  const classes: Record<string, string> = {
+    active: "border-emerald-500/20 bg-emerald-500/10 text-emerald-200",
+    pending: "border-amber-500/20 bg-amber-500/10 text-amber-200",
+    inactive: "border-zinc-700 bg-zinc-900 text-zinc-300",
+  }
+  return classes[v] || "border-zinc-700 bg-zinc-900 text-zinc-300"
+}
+
 export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTabsProps) {
   const [activeTab, setActiveTab] = useState<TabType>("tasks")
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
@@ -85,12 +151,12 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
   const [projectUsers, setProjectUsers] = useState<ProjectUser[]>([])
   const [loading, setLoading] = useState(false)
 
-  const tabs: { id: TabType; label: string }[] = [
-    { id: "tasks", label: "Tasks" },
-    { id: "receipts", label: "Receipts" },
-    { id: "timecards", label: "Time Cards" },
-    { id: "media", label: "Media" },
-    { id: "users", label: "Users" },
+  const tabs: { id: TabType; label: string; description: string }[] = [
+    { id: "tasks", label: "Tasks", description: "Schedule, blockers, and workflow" },
+    { id: "receipts", label: "Receipts", description: "Expense records and uploads" },
+    { id: "timecards", label: "Time Cards", description: "Labor logs and notes" },
+    { id: "media", label: "Media", description: "Photos, files, and attachments" },
+    { id: "users", label: "Users", description: "People assigned to this project" },
   ]
 
   useEffect(() => {
@@ -113,15 +179,12 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
 
   const fetchTasks = async () => {
     setLoading(true)
-    // TODO: Replace with actual tasks table query when table exists
-    // For now, show empty state
     setTasks([])
     setLoading(false)
   }
 
   const fetchReceipts = async () => {
     setLoading(true)
- 
 
     const { data, error } = await supabase
       .from("receipts")
@@ -148,7 +211,6 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
 
   const fetchTimecards = async () => {
     setLoading(true)
- 
 
     const { data, error } = await supabase
       .from("timecards")
@@ -176,7 +238,6 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
 
   const fetchMedia = async () => {
     setLoading(true)
- 
 
     const { data, error } = await supabase
       .from("media")
@@ -254,30 +315,30 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
     },
     {
       header: "Status",
-      accessor: (row: Task) => {
-        const statusColors: Record<string, string> = {
-          pending: "bg-yellow-100 text-yellow-800",
-          in_progress: "bg-blue-100 text-blue-800",
-          completed: "bg-green-100 text-green-800",
-        }
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[row.status] || "bg-gray-100 text-gray-800"}`}>
-            {row.status.replace("_", " ")}
-          </span>
-        )
-      },
+      accessor: (row: Task) => (
+        <span
+          className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] ${statusPill(
+            row.status,
+            "task",
+          )}`}
+        >
+          {row.status.replace("_", " ")}
+        </span>
+      ),
     },
     {
       header: "Priority",
       accessor: (row: Task) => {
         const priorityColors: Record<string, string> = {
-          low: "text-gray-600",
-          medium: "text-yellow-600",
-          high: "text-red-600",
+          low: "text-zinc-400",
+          medium: "text-amber-300",
+          high: "text-red-300",
         }
         return (
-          <span className={`font-medium ${priorityColors[row.priority] || "text-gray-600"}`}>
-            {row.priority.charAt(0).toUpperCase() + row.priority.slice(1)}
+          <span className={`font-medium ${priorityColors[row.priority || ""] || "text-zinc-400"}`}>
+            {row.priority
+              ? row.priority.charAt(0).toUpperCase() + row.priority.slice(1)
+              : "—"}
           </span>
         )
       },
@@ -293,7 +354,7 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
     },
     {
       header: "Due Date",
-      accessor: (row: Task) => row.due_date ? formatDate(row.due_date) : "—",
+      accessor: (row: Task) => (row.due_date ? formatDate(row.due_date) : "—"),
     },
   ]
 
@@ -382,15 +443,14 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
     {
       header: "Role",
       accessor: (row: ProjectUser) => {
-        const roleColors: Record<string, string> = {
-          owner: "bg-purple-100 text-purple-800",
-          admin: "bg-red-100 text-red-800",
-          editor: "bg-blue-100 text-blue-800",
-          viewer: "bg-gray-100 text-gray-800",
-        }
         const role = row.role_in_project || row.user?.role || "viewer"
         return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${roleColors[role] || "bg-gray-100 text-gray-800"}`}>
+          <span
+            className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] ${statusPill(
+              role,
+              "userRole",
+            )}`}
+          >
             {role.charAt(0).toUpperCase() + role.slice(1)}
           </span>
         )
@@ -398,18 +458,16 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
     },
     {
       header: "Status",
-      accessor: (row: ProjectUser) => {
-        const statusColors: Record<string, string> = {
-          active: "bg-green-100 text-green-800",
-          pending: "bg-yellow-100 text-yellow-800",
-          inactive: "bg-gray-100 text-gray-800",
-        }
-        return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColors[row.status] || "bg-gray-100 text-gray-800"}`}>
-            {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
-          </span>
-        )
-      },
+      accessor: (row: ProjectUser) => (
+        <span
+          className={`inline-flex rounded-full border px-2.5 py-1 text-[10px] font-medium uppercase tracking-[0.12em] ${statusPill(
+            row.status,
+            "userStatus",
+          )}`}
+        >
+          {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
+        </span>
+      ),
     },
     {
       header: "Added",
@@ -417,73 +475,151 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
     },
   ]
 
+  const activeTabMeta = tabs.find((tab) => tab.id === activeTab)
+  const ActiveIcon = tabIcon(activeTab)
+
   return (
-    <div className="w-full">
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-200">
-        <nav className="flex gap-8">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${
-                activeTab === tab.id
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
+    <div className="w-full space-y-5">
+      <div className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-950">
+        <div className="border-b border-zinc-800 bg-zinc-950 px-5 py-4">
+          <div className="space-y-1">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+              Project Workspace
+            </div>
+            <h2 className="text-xl font-semibold tracking-tight text-zinc-100">
+              Operations Workspace
+            </h2>
+            <p className="text-sm text-zinc-400">
+              Switch between tasks, receipts, time cards, media, and project users.
+            </p>
+          </div>
+        </div>
+
+        <div className="px-5 py-4">
+          <div className="flex flex-wrap gap-2">
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab.id
+              const Icon = tabIcon(tab.id)
+
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                    isActive
+                      ? "border-zinc-700 bg-zinc-900 text-zinc-100"
+                      : "border-zinc-800 bg-black text-zinc-400 hover:border-zinc-700 hover:bg-zinc-950 hover:text-zinc-100"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-zinc-800 bg-black px-4 py-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
+                <ActiveIcon className="h-4 w-4 text-zinc-300" />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="text-sm font-semibold text-zinc-100">
+                    {activeTabMeta?.label}
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-zinc-600" />
+                </div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  {activeTabMeta?.description}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Tab Content */}
-      <div className="py-6">
-        {activeTab === "tasks" && (
-          <ProjectTasks projectId={projectId} projectType={projectType} />
-        )}
-        {activeTab === "receipts" && (
-          <div>
-            {loading ? (
-              <p className="text-gray-600">Loading receipts...</p>
-            ) : (
-              <Table columns={receiptColumns} data={receipts} emptyMessage="No receipts found for this project" />
-            )}
-          </div>
-        )}
-        {activeTab === "timecards" && (
-          <div>
-            {loading ? (
-              <p className="text-gray-600">Loading timecards...</p>
-            ) : (
-              <Table columns={timecardColumns} data={timecards} emptyMessage="No timecards found for this project" />
-            )}
-          </div>
-        )}
-        {activeTab === "media" && (
-          <div>
-            {loading ? (
-              <p className="text-gray-600">Loading media...</p>
-            ) : (
-              <Table columns={mediaColumns} data={media} emptyMessage="No media found for this project" />
-            )}
-          </div>
-        )}
-        {activeTab === "users" && (
-          <div>
-            {loading ? (
-              <p className="text-gray-600">Loading users...</p>
-            ) : projectUsers.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-500 text-sm">No users assigned to this project yet</p>
-                <p className="text-gray-400 text-xs mt-1">Invite users to assign them to this project</p>
-              </div>
-            ) : (
-              <Table columns={userColumns} data={projectUsers} emptyMessage="No users found for this project" />
-            )}
-          </div>
-        )}
+      <div className="rounded-[20px] border border-zinc-800 bg-zinc-950">
+        <div className="p-5">
+          {activeTab === "tasks" && (
+            <ProjectTasks projectId={projectId} projectType={projectType} />
+          )}
+
+          {activeTab === "receipts" && (
+            <div>
+              {loading ? (
+                <div className="rounded-2xl border border-zinc-800 bg-black px-4 py-8 text-center text-sm text-zinc-500">
+                  Loading receipts...
+                </div>
+              ) : (
+                <Table
+                  columns={receiptColumns}
+                  data={receipts}
+                  emptyMessage="No receipts found for this project"
+                />
+              )}
+            </div>
+          )}
+
+          {activeTab === "timecards" && (
+            <div>
+              {loading ? (
+                <div className="rounded-2xl border border-zinc-800 bg-black px-4 py-8 text-center text-sm text-zinc-500">
+                  Loading time cards...
+                </div>
+              ) : (
+                <Table
+                  columns={timecardColumns}
+                  data={timecards}
+                  emptyMessage="No timecards found for this project"
+                />
+              )}
+            </div>
+          )}
+
+          {activeTab === "media" && (
+            <div>
+              {loading ? (
+                <div className="rounded-2xl border border-zinc-800 bg-black px-4 py-8 text-center text-sm text-zinc-500">
+                  Loading media...
+                </div>
+              ) : (
+                <Table
+                  columns={mediaColumns}
+                  data={media}
+                  emptyMessage="No media found for this project"
+                />
+              )}
+            </div>
+          )}
+
+          {activeTab === "users" && (
+            <div>
+              {loading ? (
+                <div className="rounded-2xl border border-zinc-800 bg-black px-4 py-8 text-center text-sm text-zinc-500">
+                  Loading users...
+                </div>
+              ) : projectUsers.length === 0 ? (
+                <div className="rounded-2xl border border-zinc-800 bg-black px-4 py-12 text-center">
+                  <p className="text-sm font-medium text-zinc-200">
+                    No users assigned to this project yet
+                  </p>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Invite users to assign them to this project
+                  </p>
+                </div>
+              ) : (
+                <Table
+                  columns={userColumns}
+                  data={projectUsers}
+                  emptyMessage="No users found for this project"
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { redirect, notFound } from "next/navigation"
 import { ProjectHeader } from "@/components/projects/header"
 import { ProjectTabs } from "@/components/projects/tabs"
+import { ProjectSummaryClient } from "@/components/projects/project-summary-client"
 
 interface ProjectTask {
   id: string
@@ -56,14 +57,11 @@ export default async function ProjectDetailPage({
 
   return (
     <div className="min-h-screen bg-background p-8">
-      <ProjectHeader
-        name={project.name}
-        startDate={project.start_date}
-        endDate={project.end_date}
-        memberCount={memberCount}
-        budget={project.budget}
-        remainingBudget={remainingBudget}
-      />
+      <ProjectSummaryClient
+  project={project}
+  memberCount={memberCount}
+  remainingBudget={remainingBudget}
+/>
       <div className="mt-6">
         <ProjectTabs
   projectId={slug}

@@ -1,47 +1,79 @@
-import { put } from '@vercel/blob'
 import { NextRequest, NextResponse } from 'next/server'
+import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 
-export const runtime = 'edge'
+const accountId = process.env.CLOUDFLARE_R2_ACCOUNT_ID
+const accessKeyId = process.env.CLOUDFLARE_R2_ACCESS_KEY_ID
+const secretAccessKey = process.env.CLOUDFLARE_R2_SECRET_ACCESS_KEY
+const bucket = process.env.CLOUDFLARE_R2_BUCKET
+const publicUrlBase = process.env.CLOUDFLARE_R2_PUBLIC_URL
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024 // 100MB
+function getR2Client() {
+  if (!accountId || !accessKeyId || !secretAccessKey || !bucket) {
+    throw new Error('Cloudflare R2 environment variables are not fully configured.')
+  }
 
-export async function POST(request: NextRequest) {
+  return new S3Client({
+    region: 'auto',
+    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  })
+}
+
+function sanitizeFilename(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+export async function POST(req: NextRequest) {
   try {
-    const token = process.env.BLOB_READ_WRITE_TOKEN
-    if (!token) {
-      return NextResponse.json({ error: 'Blob storage token not configured' }, { status: 500 })
+    const contentType = req.headers.get('content-type') || 'application/octet-stream'
+    const encodedName = req.headers.get('x-filename') || 'upload.bin'
+    const fileName = decodeURIComponent(encodedName)
+    const safeName = sanitizeFilename(fileName)
+
+    const body = Buffer.from(await req.arrayBuffer())
+    if (!body.length) {
+      return NextResponse.json({ error: 'Empty upload body.' }, { status: 400 })
     }
 
-    const rawFilename = request.headers.get('x-filename') || 'upload.pdf'
-    const filename = decodeURIComponent(rawFilename)
-    const contentType = request.headers.get('content-type') || 'application/pdf'
+    const key = `plans/${Date.now()}-${safeName}`
+    const client = getR2Client()
 
-    // Buffer the body to get exact size. Edge runtime strips content-length from streams.
-    const buffer = await request.arrayBuffer()
-    const size = buffer.byteLength
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: body,
+        ContentType: contentType,
+      }),
+    )
 
-    if (size === 0) {
-      return NextResponse.json({ error: 'Empty file' }, { status: 400 })
-    }
+    const url = publicUrlBase
+      ? `${publicUrlBase.replace(/\/$/, '')}/${key}`
+      : `/api/files/${encodeURIComponent(key)}`
 
-    if (size > MAX_FILE_SIZE) {
-      return NextResponse.json(
-        { error: 'File too large', details: `${(size / 1024 / 1024).toFixed(1)}MB exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB` },
-        { status: 413 },
-      )
-    }
-
-    // Pass buffered body with explicit contentLength so put() can set x-content-length header
-    const blob = await put(filename, buffer, {
-      access: 'public',
-      token,
-      addRandomSuffix: true,
+    return NextResponse.json({
+      success: true,
+      url,
+      key,
+      fileName,
       contentType,
+      size: body.length,
     })
+  } catch (error) {
+    console.error('[UPLOAD] R2 upload failed:', error)
 
-    return NextResponse.json({ url: blob.url, filename, size, type: contentType })
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
-    return NextResponse.json({ error: 'Upload failed', details: msg }, { status: 500 })
+    const message =
+      error instanceof Error ? error.message : String(error)
+
+    return NextResponse.json(
+      {
+        error: message,
+        details: JSON.stringify(error, Object.getOwnPropertyNames(error)),
+      },
+      { status: 500 },
+    )
   }
 }

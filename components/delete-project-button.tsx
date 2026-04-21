@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Trash2 } from "lucide-react"
+import { Trash2, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -22,7 +22,11 @@ interface DeleteProjectButtonProps {
   deleteProject: (projectId: string) => Promise<{ success: boolean; error?: string }>
 }
 
-export function DeleteProjectButton({ projectId, projectName, deleteProject }: DeleteProjectButtonProps) {
+export function DeleteProjectButton({
+  projectId,
+  projectName,
+  deleteProject,
+}: DeleteProjectButtonProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [open, setOpen] = useState(false)
   const { toast } = useToast()
@@ -65,26 +69,42 @@ export function DeleteProjectButton({ projectId, projectName, deleteProject }: D
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+          className="h-9 w-9 rounded-lg border border-zinc-800 bg-black text-zinc-400 hover:border-red-500/30 hover:bg-red-500/10 hover:text-red-200"
         >
           <Trash2 className="h-4 w-4" />
           <span className="sr-only">Delete project</span>
         </Button>
       </AlertDialogTrigger>
-      <AlertDialogContent>
+
+      <AlertDialogContent className="border-zinc-800 bg-zinc-950 text-zinc-100">
         <AlertDialogHeader>
-          <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-          <AlertDialogDescription>
-            This will permanently delete <span className="font-semibold">{projectName}</span> and all associated data.
-            This action cannot be undone.
+          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl border border-red-500/20 bg-red-500/10">
+            <AlertTriangle className="h-4 w-4 text-red-300" />
+          </div>
+
+          <AlertDialogTitle className="text-lg font-semibold text-zinc-100">
+            Delete project?
+          </AlertDialogTitle>
+
+          <AlertDialogDescription className="text-sm leading-6 text-zinc-400">
+            This will permanently delete{" "}
+            <span className="font-semibold text-zinc-100">{projectName}</span> and all
+            associated data. This action cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
+
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel
+            disabled={isDeleting}
+            className="border-zinc-800 bg-black text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100"
+          >
+            Cancel
+          </AlertDialogCancel>
+
           <AlertDialogAction
             onClick={handleDelete}
             disabled={isDeleting}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            className="border border-red-500/20 bg-red-500/10 text-red-200 hover:bg-red-500/15"
           >
             {isDeleting ? "Deleting..." : "Delete Project"}
           </AlertDialogAction>

@@ -357,14 +357,14 @@ export default async function MessagesPage() {
   )
 
   return (
-    <div className="h-screen bg-background">
-      <MessagesClient
-        users={users || []}
-        currentUserId={currentUserProfile?.id || ""}
-        authUserId={user.id}
-        sendMessageAction={sendMessage}
-        fetchMessagesAction={fetchMessages}
-      />
-    </div>
-  )
+  <div className="h-screen bg-black text-zinc-100">
+    <MessagesClient
+      users={users || []}
+      currentUserId={currentUserProfile?.id || ""}
+      authUserId={user.id}
+      sendMessageAction={sendMessage}
+      fetchMessagesAction={fetchMessages}
+    />
+  </div>
+)
 }

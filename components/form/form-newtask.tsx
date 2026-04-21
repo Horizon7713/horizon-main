@@ -2,10 +2,9 @@
 
 import type React from "react"
 import { useEffect, useState } from "react"
-import { AlertTriangle } from "lucide-react"
+import { AlertTriangle, ClipboardList, UserPlus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -53,6 +52,34 @@ const STATUS_OPTIONS = [
   { value: "blocked", label: "Blocked" },
   { value: "completed", label: "Completed" },
 ]
+
+function Section({
+  icon,
+  title,
+  subtitle,
+  children,
+}: {
+  icon: React.ReactNode
+  title: string
+  subtitle?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="mb-4 flex items-start gap-3">
+        <div className="rounded-xl bg-white p-2 ring-1 ring-slate-200">
+          {icon}
+        </div>
+        <div>
+          <div className="text-sm font-medium text-slate-800">{title}</div>
+          {subtitle && <div className="mt-1 text-xs text-slate-500">{subtitle}</div>}
+        </div>
+      </div>
+
+      <div className="space-y-4">{children}</div>
+    </div>
+  )
+}
 
 export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps) {
   const [formData, setFormData] = useState({
@@ -123,13 +150,13 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
     setError(null)
 
     if (!formData.name.trim()) {
-      setError("Task name is required")
+      setError("Task name is required.")
       setLoading(false)
       return
     }
 
     if (!formData.phase) {
-      setError("Phase is required")
+      setError("Phase is required.")
       setLoading(false)
       return
     }
@@ -146,7 +173,7 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
       })
 
       if (!result.success) {
-        setError(result.error || "Failed to create task")
+        setError(result.error || "Failed to create task.")
         return
       }
 
@@ -162,24 +189,35 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
       onSuccess?.()
     } catch (err) {
       console.error("[tasks] Error creating task:", err)
-      setError(err instanceof Error ? err.message : "An error occurred")
+      setError(err instanceof Error ? err.message : "An error occurred.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Card className="w-full border-0 shadow-none p-0">
-      <form onSubmit={handleSubmit} className="space-y-5">
-        {error && (
-          <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-sm flex items-start gap-2">
-            <AlertTriangle className="size-4 mt-0.5 flex-shrink-0" />
-            <p>{error}</p>
+    <form onSubmit={handleSubmit} className="space-y-5">
+      {error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 shadow-sm">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <div className="font-medium">Unable to create task</div>
+              <div className="mt-1 text-red-600/90">{error}</div>
+            </div>
           </div>
-        )}
+        </div>
+      )}
 
+      <Section
+        icon={<ClipboardList className="h-4 w-4 text-slate-600" />}
+        title="Task Details"
+        subtitle="Define the task and place it in the correct phase."
+      >
         <div className="space-y-2">
-          <Label htmlFor="name">Task Name *</Label>
+          <Label htmlFor="name" className="text-sm font-medium text-slate-700">
+            Task Name *
+          </Label>
           <Input
             id="name"
             name="name"
@@ -187,18 +225,21 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
             onChange={handleInputChange}
             placeholder="e.g. Pour foundation"
             disabled={loading}
+            className="border-slate-200 bg-white"
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="phase">Phase *</Label>
+            <Label htmlFor="phase" className="text-sm font-medium text-slate-700">
+              Phase *
+            </Label>
             <Select
               value={formData.phase}
               onValueChange={(value) => handleSelectChange("phase", value)}
               disabled={loading}
             >
-              <SelectTrigger id="phase">
+              <SelectTrigger id="phase" className="border-slate-200 bg-white text-slate-700">
                 <SelectValue placeholder="Select phase" />
               </SelectTrigger>
               <SelectContent>
@@ -212,13 +253,15 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="status">Status</Label>
+            <Label htmlFor="status" className="text-sm font-medium text-slate-700">
+              Status
+            </Label>
             <Select
               value={formData.status}
               onValueChange={(value) => handleSelectChange("status", value)}
               disabled={loading}
             >
-              <SelectTrigger id="status">
+              <SelectTrigger id="status" className="border-slate-200 bg-white text-slate-700">
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
@@ -231,10 +274,18 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
             </Select>
           </div>
         </div>
+      </Section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Section
+        icon={<UserPlus className="h-4 w-4 text-slate-600" />}
+        title="Assignment & Timing"
+        subtitle="Set responsibility and target completion timing."
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <Label htmlFor="dueDate">Due Date</Label>
+            <Label htmlFor="dueDate" className="text-sm font-medium text-slate-700">
+              Due Date
+            </Label>
             <Input
               id="dueDate"
               name="dueDate"
@@ -242,17 +293,20 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
               value={formData.dueDate}
               onChange={handleInputChange}
               disabled={loading}
+              className="border-slate-200 bg-white"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="assignedTo">Assign To</Label>
+            <Label htmlFor="assignedTo" className="text-sm font-medium text-slate-700">
+              Assign To
+            </Label>
             <Select
               value={formData.assignedTo}
               onValueChange={(value) => handleSelectChange("assignedTo", value)}
               disabled={loading || loadingUsers}
             >
-              <SelectTrigger id="assignedTo">
+              <SelectTrigger id="assignedTo" className="border-slate-200 bg-white text-slate-700">
                 <SelectValue placeholder={loadingUsers ? "Loading members..." : "Select member"} />
               </SelectTrigger>
               <SelectContent>
@@ -274,9 +328,17 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
             </Select>
           </div>
         </div>
+      </Section>
 
+      <Section
+        icon={<ClipboardList className="h-4 w-4 text-slate-600" />}
+        title="Description"
+        subtitle="Add optional context for the field team or office."
+      >
         <div className="space-y-2">
-          <Label htmlFor="description">Description</Label>
+          <Label htmlFor="description" className="text-sm font-medium text-slate-700">
+            Description
+          </Label>
           <Textarea
             id="description"
             name="description"
@@ -284,21 +346,32 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
             onChange={handleInputChange}
             placeholder="Add details about this task..."
             disabled={loading}
-            rows={4}
+            rows={5}
+            className="border-slate-200 bg-white"
           />
         </div>
+      </Section>
 
-        <div className="flex justify-end gap-2 pt-2">
-          {onCancel && (
-            <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
-              Cancel
-            </Button>
-          )}
-          <Button type="submit" disabled={loading}>
-            {loading ? "Creating..." : "Create Task"}
+      <div className="flex justify-end gap-2 pt-2">
+        {onCancel && (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+            disabled={loading}
+            className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          >
+            Cancel
           </Button>
-        </div>
-      </form>
-    </Card>
+        )}
+        <Button
+          type="submit"
+          disabled={loading}
+          className="bg-blue-600 text-white hover:bg-blue-700"
+        >
+          {loading ? "Creating..." : "Create Task"}
+        </Button>
+      </div>
+    </form>
   )
 }

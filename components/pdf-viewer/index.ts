@@ -1,6 +1,10 @@
-export { PDFCanvasViewer } from './pdf-canvas-viewer'
-export { PropertiesPanel } from './properties-panel'
-export { ResizableSidebar } from './resizable-sidebar'
-export { ToolRail } from './tool-rail'
-export { MarkupsListTable } from './markups-list-table'
-export { ScaleCalibrationDialog } from './scale-calibration-dialog'
+export * from "./markups-list-table";
+export * from "./page-thumbnail-tray";
+export * from "./pdf-upload-bar";
+export * from "./properties-panel";
+export * from "./qr-panel";
+export * from "./regions-list";
+export * from "./scale-calibration-dialog";
+export * from "./sidebar-panels";
+export * from "./takeoff-table";
+export * from "./tool-rail";

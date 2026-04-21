@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -15,74 +15,120 @@ interface ResizableSidebarProps {
 
 export function ResizableSidebar({
   children,
-  defaultWidth = 300,
-  minWidth = 200,
-  maxWidth = 600,
+  defaultWidth = 320,
+  minWidth = 250,
+  maxWidth = 500,
   onWidthChange,
 }: ResizableSidebarProps) {
   const [width, setWidth] = useState(defaultWidth)
   const [isCollapsed, setIsCollapsed] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
-  const sidebarRef = useRef<HTMLDivElement>(null)
+
+  const rootRef = useRef<HTMLDivElement>(null)
+  const lastExpandedWidthRef = useRef(defaultWidth)
+
+  useEffect(() => {
+    setWidth(defaultWidth)
+    lastExpandedWidthRef.current = defaultWidth
+  }, [defaultWidth])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing || !sidebarRef.current) return
+      if (!isResizing || !rootRef.current) return
 
-      const container = sidebarRef.current.parentElement
-      if (!container) return
+      const rect = rootRef.current.getBoundingClientRect()
+      const rawWidth = rect.right - e.clientX
+      const nextWidth = Math.max(minWidth, Math.min(maxWidth, rawWidth))
 
-      const newWidth = e.clientX - container.getBoundingClientRect().left
-      if (newWidth >= minWidth && newWidth <= maxWidth) {
-        setWidth(newWidth)
-        onWidthChange?.(newWidth)
-      }
+      setWidth((prev) => {
+        if (prev !== nextWidth) {
+          lastExpandedWidthRef.current = nextWidth
+          onWidthChange?.(nextWidth)
+        }
+        return nextWidth
+      })
     }
 
     const handleMouseUp = () => {
       setIsResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
 
     if (isResizing) {
       document.addEventListener('mousemove', handleMouseMove)
       document.addEventListener('mouseup', handleMouseUp)
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove)
-        document.removeEventListener('mouseup', handleMouseUp)
-      }
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
     }
   }, [isResizing, minWidth, maxWidth, onWidthChange])
 
+  const toggleCollapsed = () => {
+    if (isCollapsed) {
+      const restoredWidth = Math.max(minWidth, Math.min(maxWidth, lastExpandedWidthRef.current))
+      setWidth(restoredWidth)
+      setIsCollapsed(false)
+      onWidthChange?.(restoredWidth)
+      return
+    }
+
+    lastExpandedWidthRef.current = width
+    setIsCollapsed(true)
+    onWidthChange?.(0)
+  }
+
   return (
-    <div className="relative flex h-full">
+    <div ref={rootRef} className="relative flex h-full">
+      {!isCollapsed && (
+        <div
+          onMouseDown={() => setIsResizing(true)}
+          className="w-1 cursor-col-resize bg-border transition-colors hover:bg-primary"
+          title="Resize sidebar"
+        />
+      )}
+
       <div
-        ref={sidebarRef}
         className={cn(
-          'bg-card border-r border-border transition-all duration-200 overflow-hidden flex flex-col',
-          isCollapsed ? 'w-0' : `w-[${width}px]`
+          'relative flex h-full flex-col overflow-hidden border-l border-border bg-card transition-[width] duration-200',
+          isCollapsed && 'w-0 border-l-0',
         )}
         style={{ width: isCollapsed ? 0 : width }}
       >
-        <div className="flex-1 overflow-auto p-4 space-y-4">{children}</div>
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleCollapsed}
+          className="absolute left-0 top-4 z-10 h-8 w-8 -translate-x-1/2 rounded-full border bg-background shadow-sm"
+          title={isCollapsed ? 'Expand' : 'Collapse'}
+        >
+          {isCollapsed ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
+
+        <div className="min-h-0 flex-1 overflow-auto p-4">
+          {children}
+        </div>
       </div>
 
-      <div
-        onMouseDown={() => setIsResizing(true)}
-        className={cn(
-          'w-1 bg-border hover:bg-primary cursor-col-resize transition-colors',
-          !isCollapsed && 'hover:w-1'
-        )}
-      />
-
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setIsCollapsed(!isCollapsed)}
-        className="absolute left-0 top-4 h-8 w-8 p-0 z-10 translate-x-0"
-        title={isCollapsed ? 'Expand' : 'Collapse'}
-      >
-        {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-      </Button>
+      {isCollapsed && (
+        <div className="relative flex h-full w-10 items-start justify-center border-l border-border bg-card">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleCollapsed}
+            className="mt-4 h-8 w-8 rounded-full border bg-background shadow-sm"
+            title="Expand"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

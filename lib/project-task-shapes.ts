@@ -1,0 +1,31 @@
+export interface ProjectTaskAiShape {
+  id: string
+  name?: string | null
+  phase?: string | null
+  status?: string | null
+  planned_start?: string | null
+  planned_end?: string | null
+  due_date?: string | null
+  trade?: string | null
+  priority?: string | null
+  is_inspection?: boolean | null
+  is_critical?: boolean | null
+  total_float_days?: number | null
+  requires_homeowner_action?: boolean | null
+  homeowner_action_text?: string | null
+  homeowner_visible_note?: string | null
+  blocker_reason?: string | null
+  blocker_note?: string | null
+  assigned_to_name?: string | null
+  sort_order?: number | null
+  depends_on?: string[] | null
+  lag_days?: number | null
+  quantity_source?: string | null
+  quantity_value?: number | null
+  production_rate?: number | null
+  duration_mode?: string | null
+  duration_days?: number | null
+  minimum_duration_days?: number | null
+  locked_start_date?: string | null
+  locked_end_date?: string | null
+}
