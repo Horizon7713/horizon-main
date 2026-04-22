@@ -260,7 +260,7 @@ export function ProjectTasks({ projectId, projectType }: ProjectTasksProps) {
             planned_start: task.planned_start,
             planned_end: task.planned_end,
             homeowner_action_text: task.homeowner_action_text,
-            homeowner_visible_note: task.homeowner_visible_note,
+            homeownerVisibleNote: task.homeowner_visible_note ?? null,
             is_critical: task.is_critical,
             total_float_days: task.total_float_days,
           }) satisfies ProjectHealthBucketItem,
@@ -388,7 +388,7 @@ export function ProjectTasks({ projectId, projectType }: ProjectTasksProps) {
       const result = await updateTask({
         taskId: editingTask.id,
         name: normalizedEditData.name,
-        description: normalizedEditData.description,
+        description: normalizedEditData.description ?? undefined,
         phase: normalizedEditData.phase,
         status: normalizedEditData.status,
         dueDate: normalizedEditData.due_date || undefined,
@@ -622,8 +622,13 @@ export function ProjectTasks({ projectId, projectType }: ProjectTasksProps) {
         if (!other.planned_start || !other.planned_end) return false
         if ((other.trade || "general") !== (task.trade || "general")) return false
 
-        const taskStart = new Date(task.planned_start).getTime()
-        const taskEnd = new Date(task.planned_end).getTime()
+        const taskStart = task.planned_start
+  ? new Date(task.planned_start).getTime()
+  : Number.POSITIVE_INFINITY
+
+const taskEnd = task.planned_end
+  ? new Date(task.planned_end).getTime()
+  : Number.POSITIVE_INFINITY
         const otherStart = new Date(other.planned_start).getTime()
         const otherEnd = new Date(other.planned_end).getTime()
 
@@ -909,7 +914,6 @@ export function ProjectTasks({ projectId, projectType }: ProjectTasksProps) {
             }}
             onOpenNewTask={() => setOpen(true)}
             buildingSchedule={buildingSchedule}
-            buildScheduleLabel="Recalculate Timeline"
           />
         </CardHeader>
 

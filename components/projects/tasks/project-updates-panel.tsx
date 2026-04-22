@@ -212,13 +212,24 @@ export function ProjectUpdatesPanel({ projectId }: ProjectUpdatesPanelProps) {
     setMessage(null)
 
     try {
-      const result = await draftProjectUpdateFromTasks(projectId, mode)
+     const result = await draftProjectUpdateFromTasks(projectId, mode)
 
-      if (!result.success || !result.data) {
-        setMessage(result.error || "Failed to draft project update.")
-        setDrafting(false)
-        return
-      }
+if (!result.success) {
+  const errorMessage =
+    typeof (result as any)?.error === "string"
+      ? (result as any).error
+      : "Failed to draft project update."
+
+  setMessage(errorMessage)
+  setDrafting(false)
+  return
+}
+
+if (!result.data) {
+  setMessage("Failed to draft project update.")
+  setDrafting(false)
+  return
+}
 
       setTitle(result.data.title || "")
       setType(result.data.type || "progress")

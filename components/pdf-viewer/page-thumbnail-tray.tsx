@@ -37,14 +37,10 @@ type PdfJsLib = {
   }) => PdfLoadingTask;
 };
 
+
 declare global {
   interface Window {
     pdfjsLib?: PdfJsLib;
-    requestIdleCallback?: (
-      callback: IdleCallback,
-      options?: IdleCallbackOptions
-    ) => number;
-    cancelIdleCallback?: (handle: number) => void;
   }
 }
 

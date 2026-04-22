@@ -117,6 +117,7 @@ export interface ProjectHealthBucketItem {
   planned_end?: string | null
   requires_homeowner_action?: boolean | null
   homeowner_action_text?: string | null
+  homeowner_visible_note?: string | null
   blocker_reason?: string | null
   blocker_note?: string | null
   is_critical?: boolean | null

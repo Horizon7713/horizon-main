@@ -122,7 +122,13 @@ export function FormNewTask({ projectId, onSuccess, onCancel }: FormNewTaskProps
           console.error("[tasks] Error fetching project members:", error)
           setUsers([])
         } else {
-          setUsers((data as ProjectMember[]) || [])
+          const normalizedUsers: ProjectMember[] = ((data ?? []) as any[]).map((member) => ({
+  user_id: member.user_id,
+  role_in_project: member.role_in_project,
+  user: Array.isArray(member.user) ? member.user[0] : member.user,
+}))
+
+setUsers(normalizedUsers)
         }
       } catch (err) {
         console.error("[tasks] Error fetching project members:", err)
