@@ -72,7 +72,7 @@ export class PDFCollaborationService {
             table: 'pdf_sessions_collaboration',
             filter: `pdf_file_id=eq.${pdfFileId}`,
           },
-          (payload) => this.handleSessionChange(payload)
+          (payload: any) => this.handleSessionChange(payload)
         )
         .on(
           'postgres_changes' as any,
@@ -82,7 +82,7 @@ export class PDFCollaborationService {
             table: 'pdf_markup_versions',
             filter: `markup_id=cs.${pdfFileId}`,
           },
-          (payload) => this.handleMarkupChange(payload)
+          (payload: any) => this.handleSessionChange(payload)
         )
         .subscribe()
 
