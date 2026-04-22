@@ -1824,7 +1824,7 @@ export async function draftProjectUpdateFromTasks(
     throw new Error(tasksError.message)
   }
 
-  const allTasks = (tasks || []) as ProjectTaskAiShape[]
+  const allTasks = ((tasks ?? []) as unknown) as ProjectTaskAiShape[]
   const client = new OpenAI({ apiKey })
 
   const prompt = buildProjectUpdateDraftPrompt({
