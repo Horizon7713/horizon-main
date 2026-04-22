@@ -33,6 +33,8 @@ type GroupedMessage = {
   files: Array<{ url: string; mime_type: string }>
 }
 
+type DisplayItem = Message | GroupedMessage
+
 type Project = {
   id: string
   name: string
@@ -252,8 +254,10 @@ export function MessageGallery({ currentUserId, selectedUserId, fetchMessagesAct
 
   const filteredMessages = filterMessages(activeTab)
 
-  const displayItems =
-    activeTab === "receipts" || activeTab === "timecards" ? groupMessagesByBundle(filteredMessages) : filteredMessages
+  const displayItems: DisplayItem[] =
+  activeTab === "receipts" || activeTab === "timecards"
+    ? groupMessagesByBundle(filteredMessages)
+    : filteredMessages
 
   const groupedByDate = groupByDateCategory(displayItems)
   const sortedCategories = Array.from(groupedByDate.keys()).sort((a, b) => {
@@ -324,7 +328,7 @@ export function MessageGallery({ currentUserId, selectedUserId, fetchMessagesAct
         mimeType: m.mime_type,
       }))
 
-    const projectName = receipt.projects?.name || "Unknown Project"
+    const projectName = receipt.projects?.[0]?.name || "Unknown Project"
 
     const receiptDataToSet = {
       totalPrice: receipt.total_price.toString(),
