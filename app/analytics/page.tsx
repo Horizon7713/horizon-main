@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { Suspense, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import useSWR, { mutate } from 'swr'
 import { Button } from '@/components/ui/button'
@@ -23,7 +23,7 @@ async function fetchFindings(url: string) {
   return res.json()
 }
 
-export default function AnalyticsPage() {
+function AnalyticsPageContent() {
   const searchParams = useSearchParams()
   const documentId = searchParams.get('documentId')
   const [isRunning, setIsRunning] = useState(false)
@@ -272,5 +272,12 @@ function SeverityBreakdown({
         )
       })}
     </div>
+  )
+}
+export default function AnalyticsPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background p-6" />}>
+      <AnalyticsPageContent />
+    </Suspense>
   )
 }
