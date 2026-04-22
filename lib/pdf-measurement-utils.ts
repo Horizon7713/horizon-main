@@ -3,7 +3,12 @@
 // All formatting is computed at render time. No formatted strings stored.
 // ============================================================================
 
-import { Point, PageScale } from './pdf-viewer-types'
+import { Point } from './pdf-viewer-types'
+
+interface PageScale {
+  pageNumber: number
+  inchesPerPixel: number
+}
 
 // ---------------------------------------------------------------------------
 // 1. Distance

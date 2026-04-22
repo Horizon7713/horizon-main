@@ -1,203 +1,290 @@
 // ============================================================================
 // Markup Rendering & Hit-Testing Utilities
-// Measurements are formatted at render time via inchesPerPixel — never stored.
+// Compatible with current PdfMarkup types from pdf-viewer-types.ts
 // ============================================================================
 
-import { Markup, MarkupStyle, Point } from './pdf-viewer-types'
-import { getDistanceLabel, getAreaLabel, getPolygonCentroid } from './pdf-measurement-utils'
+import type {
+  PdfMarkup,
+  MarkupStyle,
+  Point,
+  Rect,
+  RectangleMarkup,
+  EllipseMarkup,
+  LineMarkup,
+  CountMarkup,
+  TextMarkup,
+} from "./pdf-viewer-types"
 
 // ---------------------------------------------------------------------------
 // Public render entry point
 // ---------------------------------------------------------------------------
 
-/**
- * Draw a single markup to the canvas.
- * The caller is expected to have *not* applied ctx.scale/translate —
- * this function applies `ctx.translate(panX, panY); ctx.scale(scale, scale);`
- * internally so all markup coordinates are in PDF space.
- *
- * @param inchesPerPixel Current page calibration (null = uncalibrated).
- */
 export function drawMarkup(
   ctx: CanvasRenderingContext2D,
-  markup: Markup,
+  markup: PdfMarkup,
   scale: number,
   panX: number,
   panY: number,
   isSelected: boolean,
-  inchesPerPixel: number | null = null,
+  _inchesPerPixel: number | null = null,
 ) {
   ctx.save()
   ctx.translate(panX, panY)
   ctx.scale(scale, scale)
 
-  const style = markup.style
-  ctx.strokeStyle = style.strokeColor
-  ctx.lineWidth = style.strokeWidth
-  ctx.globalAlpha = style.opacity
-  ctx.fillStyle = style.fillColor || 'transparent'
+  applyStyle(ctx, markup.style)
 
   switch (markup.type) {
-    case 'line': {
-      ctx.beginPath()
-      ctx.moveTo(markup.startPoint.x, markup.startPoint.y)
-      ctx.lineTo(markup.endPoint.x, markup.endPoint.y)
-      ctx.stroke()
+    case "rectangle":
+    case "highlight":
+    case "takeoff_item":
+    case "measure-area":
+      drawRectangleMarkup(ctx, markup)
       break
-    }
 
-    case 'rectangle': {
-      ctx.fillRect(markup.x, markup.y, markup.width, markup.height)
-      ctx.strokeRect(markup.x, markup.y, markup.width, markup.height)
+    case "ellipse":
+    case "cloud":
+      drawEllipseMarkup(ctx, markup)
       break
-    }
 
-    case 'ellipse': {
-      ctx.beginPath()
-      ctx.ellipse(markup.cx, markup.cy, markup.rx, markup.ry, markup.rotation || 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.stroke()
+    case "line":
+    case "arrow":
+    case "measure-length":
+    case "calibrate":
+      drawLineMarkup(ctx, markup)
       break
-    }
 
-    case 'text': {
-      const fontSize = markup.style.fontSize || 14
-      const fontFamily = markup.style.fontFamily || 'Arial'
-      ctx.fillStyle = style.strokeColor
-      ctx.font = `${fontSize}px ${fontFamily}`
-      ctx.fillText(markup.text, markup.x, markup.y, markup.maxWidth)
+    case "measure-count":
+      drawCountMarkup(ctx, markup)
       break
-    }
 
-    case 'polyline': {
-      if (markup.points.length > 0) {
-        ctx.beginPath()
-        ctx.moveTo(markup.points[0].x, markup.points[0].y)
-        for (let i = 1; i < markup.points.length; i++) {
-          ctx.lineTo(markup.points[i].x, markup.points[i].y)
-        }
-        if (markup.closed) {
-          ctx.closePath()
-          ctx.fill()
-        }
-        ctx.stroke()
-      }
+    case "text":
+    case "callout":
+    case "stamp":
+      drawTextMarkup(ctx, markup)
       break
-    }
 
-    case 'distance': {
-      drawDistanceMarkup(ctx, markup, scale, style, inchesPerPixel)
-      break
-    }
-
-    case 'area': {
-      drawAreaMarkup(ctx, markup, scale, style, inchesPerPixel)
-      break
-    }
+    default:
+      exhaustiveCheck(markup)
   }
 
   if (isSelected) {
-    ctx.strokeStyle = '#00FF00'
-    ctx.lineWidth = 1 / scale
-    ctx.setLineDash([5 / scale, 5 / scale])
-    drawSelectionBounds(ctx, markup)
-    ctx.setLineDash([])
+    drawSelectionBounds(ctx, markup, scale)
   }
 
   ctx.restore()
 }
 
 // ---------------------------------------------------------------------------
-// Distance rendering
+// Styling
 // ---------------------------------------------------------------------------
 
-function drawDistanceMarkup(
-  ctx: CanvasRenderingContext2D,
-  dist: Extract<Markup, { type: 'distance' }>,
-  scale: number,
-  style: MarkupStyle,
-  inchesPerPixel: number | null,
-) {
-  const dx = dist.endPoint.x - dist.startPoint.x
-  const dy = dist.endPoint.y - dist.startPoint.y
-  const angle = Math.atan2(dy, dx)
-  const perpAngle = angle + Math.PI / 2
-  const tickLen = 8 / scale
+function applyStyle(ctx: CanvasRenderingContext2D, style: MarkupStyle) {
+  ctx.strokeStyle = style.strokeColor
+  ctx.fillStyle = style.fillColor ?? "transparent"
+  ctx.lineWidth = style.strokeWidth
+  ctx.globalAlpha = style.opacity
 
-  ctx.beginPath()
-  ctx.moveTo(dist.startPoint.x, dist.startPoint.y)
-  ctx.lineTo(dist.endPoint.x, dist.endPoint.y)
-  ctx.stroke()
-
-  const drawTick = (pt: Point) => {
-    ctx.beginPath()
-    ctx.moveTo(pt.x + Math.cos(perpAngle) * tickLen, pt.y + Math.sin(perpAngle) * tickLen)
-    ctx.lineTo(pt.x - Math.cos(perpAngle) * tickLen, pt.y - Math.sin(perpAngle) * tickLen)
-    ctx.stroke()
+  if (style.dashArray?.length) {
+    ctx.setLineDash(style.dashArray)
+  } else {
+    ctx.setLineDash([])
   }
-
-  drawTick(dist.startPoint)
-  drawTick(dist.endPoint)
-
-  const dotRadius = 3 / scale
-  ctx.fillStyle = style.strokeColor
-
-  ctx.beginPath()
-  ctx.arc(dist.startPoint.x, dist.startPoint.y, dotRadius, 0, Math.PI * 2)
-  ctx.fill()
-
-  ctx.beginPath()
-  ctx.arc(dist.endPoint.x, dist.endPoint.y, dotRadius, 0, Math.PI * 2)
-  ctx.fill()
-
-  const midX = (dist.startPoint.x + dist.endPoint.x) / 2
-  const midY = (dist.startPoint.y + dist.endPoint.y) / 2
-  const fontSize = (style.fontSize || 14) / scale
-  ctx.font = `bold ${fontSize}px ${style.fontFamily || 'Arial'}`
-
-  const label = getDistanceLabel(dist.pixelDistance, inchesPerPixel)
-  renderLabelPill(ctx, label, midX, midY, fontSize, scale, style.strokeColor)
 }
 
 // ---------------------------------------------------------------------------
-// Area rendering
+// Rectangle / Area
 // ---------------------------------------------------------------------------
 
-function drawAreaMarkup(
+function drawRectangleMarkup(
   ctx: CanvasRenderingContext2D,
-  area: Extract<Markup, { type: 'area' }>,
-  scale: number,
-  style: MarkupStyle,
-  inchesPerPixel: number | null,
+  markup: RectangleMarkup,
 ) {
-  if (area.points.length === 0) return
+  const { x, y, width, height } = normalizeRect(markup.bounds)
+
+  ctx.fillRect(x, y, width, height)
+  ctx.strokeRect(x, y, width, height)
+
+  if (markup.type === "measure-area") {
+    const label = formatMeasurement(
+      markup.measurementValue,
+      markup.measurementUnit,
+      "area",
+    )
+
+    if (label) {
+      const fontSize = markup.style.fontSize ?? 14
+      renderLabelPill(
+        ctx,
+        label,
+        x + width / 2,
+        y + height / 2,
+        fontSize,
+        markup.style.strokeColor,
+      )
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Ellipse
+// ---------------------------------------------------------------------------
+
+function drawEllipseMarkup(
+  ctx: CanvasRenderingContext2D,
+  markup: EllipseMarkup,
+) {
+  const { x, y, width, height } = normalizeRect(markup.bounds)
+  const cx = x + width / 2
+  const cy = y + height / 2
+  const rx = width / 2
+  const ry = height / 2
 
   ctx.beginPath()
-  ctx.moveTo(area.points[0].x, area.points[0].y)
-  for (let i = 1; i < area.points.length; i++) {
-    ctx.lineTo(area.points[i].x, area.points[i].y)
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+}
+
+// ---------------------------------------------------------------------------
+// Line / Arrow / Distance
+// ---------------------------------------------------------------------------
+
+function drawLineMarkup(
+  ctx: CanvasRenderingContext2D,
+  markup: LineMarkup,
+) {
+  ctx.beginPath()
+  ctx.moveTo(markup.start.x, markup.start.y)
+  ctx.lineTo(markup.end.x, markup.end.y)
+  ctx.stroke()
+
+  if (markup.type === "arrow") {
+    drawArrowHead(ctx, markup.start, markup.end)
   }
-  ctx.closePath()
+
+  if (markup.type === "measure-length" || markup.type === "calibrate") {
+    drawMeasurementEndpoints(ctx, markup)
+
+    const label = formatMeasurement(
+      markup.measurementValue,
+      markup.measurementUnit,
+      "length",
+    )
+
+    if (label) {
+      const fontSize = markup.style.fontSize ?? 14
+      const midX = (markup.start.x + markup.end.x) / 2
+      const midY = (markup.start.y + markup.end.y) / 2
+
+      renderLabelPill(
+        ctx,
+        label,
+        midX,
+        midY,
+        fontSize,
+        markup.style.strokeColor,
+      )
+    }
+  }
+}
+
+function drawArrowHead(
+  ctx: CanvasRenderingContext2D,
+  start: Point,
+  end: Point,
+) {
+  const headLength = 10
+  const angle = Math.atan2(end.y - start.y, end.x - start.x)
+
+  ctx.beginPath()
+  ctx.moveTo(end.x, end.y)
+  ctx.lineTo(
+    end.x - headLength * Math.cos(angle - Math.PI / 6),
+    end.y - headLength * Math.sin(angle - Math.PI / 6),
+  )
+  ctx.moveTo(end.x, end.y)
+  ctx.lineTo(
+    end.x - headLength * Math.cos(angle + Math.PI / 6),
+    end.y - headLength * Math.sin(angle + Math.PI / 6),
+  )
+  ctx.stroke()
+}
+
+function drawMeasurementEndpoints(
+  ctx: CanvasRenderingContext2D,
+  markup: LineMarkup,
+) {
+  const radius = 3
+
+  ctx.save()
+  ctx.fillStyle = markup.style.strokeColor
+
+  ctx.beginPath()
+  ctx.arc(markup.start.x, markup.start.y, radius, 0, Math.PI * 2)
   ctx.fill()
 
-  ctx.setLineDash([6 / scale, 4 / scale])
-  ctx.stroke()
-  ctx.setLineDash([])
+  ctx.beginPath()
+  ctx.arc(markup.end.x, markup.end.y, radius, 0, Math.PI * 2)
+  ctx.fill()
 
-  const vertexRadius = 3 / scale
-  ctx.fillStyle = style.strokeColor
-  for (const pt of area.points) {
-    ctx.beginPath()
-    ctx.arc(pt.x, pt.y, vertexRadius, 0, Math.PI * 2)
-    ctx.fill()
+  ctx.restore()
+}
+
+// ---------------------------------------------------------------------------
+// Count
+// ---------------------------------------------------------------------------
+
+function drawCountMarkup(
+  ctx: CanvasRenderingContext2D,
+  markup: CountMarkup,
+) {
+  const radius = 8
+
+  ctx.beginPath()
+  ctx.arc(markup.point.x, markup.point.y, radius, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.stroke()
+
+  const label = String(markup.countValue)
+  const fontSize = markup.style.fontSize ?? 12
+
+  ctx.save()
+  ctx.fillStyle = markup.style.textColor ?? "#ffffff"
+  ctx.font = `bold ${fontSize}px Arial`
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(label, markup.point.x, markup.point.y)
+  ctx.restore()
+}
+
+// ---------------------------------------------------------------------------
+// Text
+// ---------------------------------------------------------------------------
+
+function drawTextMarkup(
+  ctx: CanvasRenderingContext2D,
+  markup: TextMarkup,
+) {
+  const { x, y, width, height } = normalizeRect(markup.bounds)
+  const fontSize = markup.style.fontSize ?? 14
+
+  ctx.save()
+  ctx.fillStyle = markup.style.textColor ?? markup.style.strokeColor
+  ctx.font = `${fontSize}px Arial`
+  ctx.textAlign = "left"
+  ctx.textBaseline = "top"
+
+  const lines = wrapText(ctx, markup.text, width)
+  const lineHeight = fontSize * 1.2
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineY = y + i * lineHeight
+    if (lineY > y + height) break
+    ctx.fillText(lines[i], x, lineY)
   }
 
-  const centroid = getPolygonCentroid(area.points)
-  const fontSize = (style.fontSize || 14) / scale
-  ctx.font = `bold ${fontSize}px ${style.fontFamily || 'Arial'}`
-  const label = getAreaLabel(area.pixelArea, inchesPerPixel)
-
-  renderLabelPill(ctx, label, centroid.x, centroid.y, fontSize, scale, style.strokeColor)
+  ctx.restore()
 }
 
 // ---------------------------------------------------------------------------
@@ -210,158 +297,138 @@ function renderLabelPill(
   x: number,
   y: number,
   fontSize: number,
-  scale: number,
   textColor: string,
 ) {
-  const metrics = ctx.measureText(label)
-  const pad = 3 / scale
-  const lineHeight = fontSize * 1.2
+  ctx.save()
+  ctx.font = `bold ${fontSize}px Arial`
 
-  ctx.fillStyle = 'rgba(255,255,255,0.9)'
-  ctx.fillRect(
-    x - metrics.width / 2 - pad,
-    y - lineHeight / 2 - pad,
-    metrics.width + pad * 2,
-    lineHeight + pad * 2,
-  )
+  const metrics = ctx.measureText(label)
+  const padX = 6
+  const padY = 4
+  const width = metrics.width + padX * 2
+  const height = fontSize * 1.2 + padY * 2
+
+  ctx.fillStyle = "rgba(255,255,255,0.9)"
+  ctx.fillRect(x - width / 2, y - height / 2, width, height)
 
   ctx.fillStyle = textColor
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
   ctx.fillText(label, x, y)
-  ctx.textAlign = 'start'
-  ctx.textBaseline = 'alphabetic'
+
+  ctx.restore()
 }
 
 // ---------------------------------------------------------------------------
 // Selection bounds
 // ---------------------------------------------------------------------------
 
-function drawSelectionBounds(ctx: CanvasRenderingContext2D, markup: Markup) {
-  switch (markup.type) {
-    case 'rectangle': {
-      ctx.strokeRect(markup.x, markup.y, markup.width, markup.height)
-      return
-    }
+function drawSelectionBounds(
+  ctx: CanvasRenderingContext2D,
+  markup: PdfMarkup,
+  scale: number,
+) {
+  const bounds = getMarkupBounds(markup)
 
-    case 'ellipse': {
-      ctx.beginPath()
-      ctx.ellipse(markup.cx, markup.cy, markup.rx, markup.ry, markup.rotation || 0, 0, Math.PI * 2)
-      ctx.stroke()
-      return
-    }
-
-    default: {
-      const bounds = getMarkupBounds(markup)
-      ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
-    }
-  }
+  ctx.save()
+  ctx.strokeStyle = "#00FF00"
+  ctx.lineWidth = 1 / scale
+  ctx.setLineDash([5 / scale, 5 / scale])
+  ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height)
+  ctx.restore()
 }
 
 // ---------------------------------------------------------------------------
 // Bounding box
 // ---------------------------------------------------------------------------
 
-export function getMarkupBounds(markup: Markup): { x: number; y: number; width: number; height: number } {
+export function getMarkupBounds(
+  markup: PdfMarkup,
+): { x: number; y: number; width: number; height: number } {
   switch (markup.type) {
-    case 'line': {
-      const minX = Math.min(markup.startPoint.x, markup.endPoint.x)
-      const maxX = Math.max(markup.startPoint.x, markup.endPoint.x)
-      const minY = Math.min(markup.startPoint.y, markup.endPoint.y)
-      const maxY = Math.max(markup.startPoint.y, markup.endPoint.y)
+    case "rectangle":
+    case "highlight":
+    case "takeoff_item":
+    case "measure-area":
+    case "ellipse":
+    case "cloud":
+    case "text":
+    case "callout":
+    case "stamp":
+      return normalizeRect(markup.bounds)
+
+    case "line":
+    case "arrow":
+    case "measure-length":
+    case "calibrate": {
+      const minX = Math.min(markup.start.x, markup.end.x)
+      const maxX = Math.max(markup.start.x, markup.end.x)
+      const minY = Math.min(markup.start.y, markup.end.y)
+      const maxY = Math.max(markup.start.y, markup.end.y)
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
     }
 
-    case 'rectangle': {
-      const x = Math.min(markup.x, markup.x + markup.width)
-      const y = Math.min(markup.y, markup.y + markup.height)
-      const width = Math.abs(markup.width)
-      const height = Math.abs(markup.height)
-      return { x, y, width, height }
-    }
-
-    case 'text': {
-      const width = markup.maxWidth || estimateTextWidth(markup.text, markup.style.fontSize || 14)
-      const height = markup.style.fontSize || 14
-      return { x: markup.x, y: markup.y - height, width, height }
-    }
-
-    case 'ellipse': {
+    case "measure-count":
       return {
-        x: markup.cx - markup.rx,
-        y: markup.cy - markup.ry,
-        width: markup.rx * 2,
-        height: markup.ry * 2,
+        x: markup.point.x - 8,
+        y: markup.point.y - 8,
+        width: 16,
+        height: 16,
       }
-    }
-
-    case 'polyline': {
-      return pointsBounds(markup.points)
-    }
-
-    case 'distance': {
-      const minX = Math.min(markup.startPoint.x, markup.endPoint.x)
-      const maxX = Math.max(markup.startPoint.x, markup.endPoint.x)
-      const minY = Math.min(markup.startPoint.y, markup.endPoint.y)
-      const maxY = Math.max(markup.startPoint.y, markup.endPoint.y)
-      return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-    }
-
-    case 'area': {
-      return pointsBounds(markup.points)
-    }
 
     default:
-      return { x: 0, y: 0, width: 0, height: 0 }
+      return exhaustiveCheck(markup)
   }
-}
-
-function pointsBounds(points: Point[]): { x: number; y: number; width: number; height: number } {
-  if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0 }
-
-  let minX = points[0].x
-  let maxX = points[0].x
-  let minY = points[0].y
-  let maxY = points[0].y
-
-  for (let i = 1; i < points.length; i++) {
-    minX = Math.min(minX, points[i].x)
-    maxX = Math.max(maxX, points[i].x)
-    minY = Math.min(minY, points[i].y)
-    maxY = Math.max(maxY, points[i].y)
-  }
-
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
 }
 
 // ---------------------------------------------------------------------------
 // Hit testing
 // ---------------------------------------------------------------------------
 
-export function isPointInMarkup(point: Point, markup: Markup, tolerance = 10): boolean {
+export function isPointInMarkup(
+  point: Point,
+  markup: PdfMarkup,
+  tolerance = 10,
+): boolean {
   switch (markup.type) {
-    case 'line':
-      return isPointNearSegment(point, markup.startPoint, markup.endPoint, tolerance)
+    case "line":
+    case "arrow":
+    case "measure-length":
+    case "calibrate":
+      return isPointNearSegment(point, markup.start, markup.end, tolerance)
 
-    case 'distance':
-      return isPointNearSegment(point, markup.startPoint, markup.endPoint, tolerance)
+    case "rectangle":
+    case "highlight":
+    case "takeoff_item":
+    case "measure-area": {
+      const { x, y, width, height } = normalizeRect(markup.bounds)
+      return isPointNearRectangle(point, x, y, width, height, tolerance)
+    }
 
-    case 'rectangle':
-      return isPointNearRectangle(point, markup.x, markup.y, markup.width, markup.height, tolerance)
+    case "ellipse":
+    case "cloud": {
+      const { x, y, width, height } = normalizeRect(markup.bounds)
+      return isPointNearEllipse(
+        point,
+        x + width / 2,
+        y + height / 2,
+        width / 2,
+        height / 2,
+        tolerance,
+      )
+    }
 
-    case 'ellipse':
-      return isPointNearEllipse(point, markup.cx, markup.cy, markup.rx, markup.ry, tolerance)
-
-    case 'text': {
+    case "text":
+    case "callout":
+    case "stamp": {
       const bounds = getMarkupBounds(markup)
       return isPointInBounds(point, expandBounds(bounds, tolerance))
     }
 
-    case 'polyline':
-      return isPointInPolyline(point, markup.points, tolerance, !!markup.closed)
-
-    case 'area':
-      return isPointInPolygon(point, markup.points) || isPointNearPolygonEdges(point, markup.points, tolerance)
+    case "measure-count": {
+      const bounds = getMarkupBounds(markup)
+      return isPointInBounds(point, expandBounds(bounds, tolerance))
+    }
 
     default: {
       const bounds = getMarkupBounds(markup)
@@ -373,6 +440,15 @@ export function isPointInMarkup(point: Point, markup: Markup, tolerance = 10): b
 // ---------------------------------------------------------------------------
 // Geometry helpers
 // ---------------------------------------------------------------------------
+
+function normalizeRect(bounds: Rect): Rect {
+  const x = Math.min(bounds.x, bounds.x + bounds.width)
+  const y = Math.min(bounds.y, bounds.y + bounds.height)
+  const width = Math.abs(bounds.width)
+  const height = Math.abs(bounds.height)
+
+  return { x, y, width, height }
+}
 
 function isPointInBounds(
   point: Point,
@@ -398,12 +474,19 @@ function expandBounds(
   }
 }
 
-function isPointNearSegment(point: Point, start: Point, end: Point, tolerance: number): boolean {
+function isPointNearSegment(
+  point: Point,
+  start: Point,
+  end: Point,
+  tolerance: number,
+): boolean {
   const lengthSq = squaredDistance(start, end)
   if (lengthSq === 0) return calculateDistance(point, start) <= tolerance
 
   const t =
-    ((point.x - start.x) * (end.x - start.x) + (point.y - start.y) * (end.y - start.y)) / lengthSq
+    ((point.x - start.x) * (end.x - start.x) +
+      (point.y - start.y) * (end.y - start.y)) /
+    lengthSq
 
   const clampedT = Math.max(0, Math.min(1, t))
   const projection = {
@@ -441,7 +524,7 @@ function isPointNearRectangle(
     point.y >= top + tolerance &&
     point.y <= bottom - tolerance
 
-  return !insideCore || (right - left <= tolerance * 2 || bottom - top <= tolerance * 2)
+  return !insideCore || right - left <= tolerance * 2 || bottom - top <= tolerance * 2
 }
 
 function isPointNearEllipse(
@@ -472,60 +555,6 @@ function isPointNearEllipse(
   return !inner
 }
 
-function isPointInPolyline(point: Point, points: Point[], tolerance: number, closed: boolean): boolean {
-  if (points.length === 0) return false
-  if (points.length === 1) return calculateDistance(point, points[0]) <= tolerance
-
-  for (let i = 0; i < points.length - 1; i++) {
-    if (isPointNearSegment(point, points[i], points[i + 1], tolerance)) {
-      return true
-    }
-  }
-
-  if (closed && points.length > 2) {
-    return isPointNearSegment(point, points[points.length - 1], points[0], tolerance)
-  }
-
-  return false
-}
-
-function isPointNearPolygonEdges(point: Point, points: Point[], tolerance: number): boolean {
-  if (points.length < 2) return false
-
-  for (let i = 0; i < points.length; i++) {
-    const start = points[i]
-    const end = points[(i + 1) % points.length]
-    if (isPointNearSegment(point, start, end, tolerance)) {
-      return true
-    }
-  }
-
-  return false
-}
-
-function isPointInPolygon(point: Point, polygon: Point[]): boolean {
-  if (polygon.length < 3) return false
-
-  let inside = false
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const xi = polygon[i].x
-    const yi = polygon[i].y
-    const xj = polygon[j].x
-    const yj = polygon[j].y
-
-    const intersects =
-      yi > point.y !== yj > point.y &&
-      point.x < ((xj - xi) * (point.y - yi)) / ((yj - yi) || Number.EPSILON) + xi
-
-    if (intersects) {
-      inside = !inside
-    }
-  }
-
-  return inside
-}
-
 function squaredDistance(a: Point, b: Point): number {
   const dx = b.x - a.x
   const dy = b.y - a.y
@@ -536,12 +565,48 @@ function calculateDistance(a: Point, b: Point): number {
   return Math.sqrt(squaredDistance(a, b))
 }
 
-function estimateTextWidth(text: string, fontSize: number): number {
-  return text.length * fontSize * 0.6
+function wrapText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string[] {
+  if (!text) return [""]
+
+  const words = text.split(/\s+/)
+  const lines: string[] = []
+  let current = ""
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word
+    if (ctx.measureText(candidate).width <= maxWidth || !current) {
+      current = candidate
+    } else {
+      lines.push(current)
+      current = word
+    }
+  }
+
+  if (current) lines.push(current)
+  return lines
+}
+
+function formatMeasurement(
+  value?: number,
+  unit?: string,
+  kind?: "length" | "area",
+): string | null {
+  if (value == null) return null
+  if (unit) return `${value} ${unit}`
+  if (kind === "area") return `${value}`
+  return `${value}`
+}
+
+function exhaustiveCheck(x: never): never {
+  throw new Error(`Unhandled markup type: ${JSON.stringify(x)}`)
 }
 
 // ---------------------------------------------------------------------------
-// ID generation — use crypto.randomUUID() for database compatibility
+// ID generation
 // ---------------------------------------------------------------------------
 
 export function generateMarkupId(): string {

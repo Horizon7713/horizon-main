@@ -1,7 +1,13 @@
 'use server'
 
 import { createClient } from '@/lib/supabase/server'
-import type { Markup, PageScale } from '@/lib/pdf-viewer-types'
+import type { PdfMarkup as Markup } from '@/lib/pdf-viewer-types'
+
+type PageScale = {
+  pageNumber: number
+  inchesPerPixel: number
+  label?: string
+}
 
 // ---------------------------------------------------------------------------
 // Event types — must match document_event_type enum in Postgres

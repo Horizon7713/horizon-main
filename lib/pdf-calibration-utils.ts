@@ -3,7 +3,11 @@
 // Handles per-page scale calibration for the plan viewer.
 // ============================================================================
 
-import { PageScale } from './pdf-viewer-types'
+export interface PageScale {
+  pageNumber: number
+  inchesPerPixel: number
+  label?: string
+}
 
 export interface ScalePreset {
   label: string
@@ -26,10 +30,6 @@ export const SCALE_PRESETS: ScalePreset[] = [
   { label: '1" = 40\'-0"  (Site)', realInchesPerDrawingInch: 480 },
 ]
 
-/**
- * Preset scales are only safe when PDF-space units are known and controlled.
- * In the current bridge viewer, this should be treated as approximate.
- */
 export function presetToInchesPerPixel(preset: ScalePreset, pdfUnitsPerDrawingInch = 72): number {
   if (pdfUnitsPerDrawingInch <= 0) return 0
   return preset.realInchesPerDrawingInch / pdfUnitsPerDrawingInch

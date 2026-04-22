@@ -4,7 +4,13 @@
 // Optimised for 10k+ markups via Map-based lookup instead of array scans.
 // ============================================================================
 
-import type { Markup, PageScale } from '@/lib/pdf-viewer-types'
+import type { PdfMarkup as Markup } from '@/lib/pdf-viewer-types'
+
+type PageScale = {
+  pageNumber: number
+  inchesPerPixel: number
+  label?: string
+}
 
 // ---------------------------------------------------------------------------
 // Event types — mirrors the document_event_type Postgres enum

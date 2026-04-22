@@ -1,6 +1,6 @@
 'use server'
 
-import { generateText, Output } from 'ai'
+import { generateObject } from 'ai'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 
@@ -186,11 +186,13 @@ export async function runDocumentAnalysis(documentId: string): Promise<AnalysisR
   try {
     const context = await gatherAnalysisContext(documentId)
 
-    const { output } = await generateText({
-      model: 'xai/grok-3-mini',
-      output: Output.object({ schema: analysisOutputSchema }),
-      prompt: buildAnalysisPrompt(context),
-    })
+    const { object: output } = await generateObject({
+  model: 'xai/grok-3-mini',
+  schema: analysisOutputSchema,
+  prompt: buildAnalysisPrompt(context),
+})
+
+if (!output) throw new Error('AI returned no structured output')
 
     if (!output) throw new Error('AI returned no structured output')
 

@@ -5,20 +5,15 @@ export async function extractReceiptTextFromImage(imageBase64: string): Promise<
     console.log("[v0] Starting OCR extraction from receipt image...")
     
     // Convert base64 to buffer
-    const binaryString = Buffer.from(imageBase64, 'base64').toString('binary')
-    const bytes = new Uint8Array(binaryString.length)
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i)
-    }
+    const imageDataUrl = `data:image/png;base64,${imageBase64}`
 
-    // Run Tesseract OCR
-    const result = await Tesseract.recognize(bytes, 'eng', {
-      logger: (m) => {
-        if (m.status === 'recognizing') {
-          console.log(`[v0] OCR progress: ${Math.round(m.progress * 100)}%`)
-        }
-      },
-    })
+const result = await Tesseract.recognize(imageDataUrl, 'eng', {
+  logger: (m) => {
+    if (m.status === 'recognizing') {
+      console.log(`[v0] OCR progress: ${Math.round(m.progress * 100)}%`)
+    }
+  },
+})
 
     const extractedText = result.data.text
     console.log("[v0] OCR extraction complete. Extracted text length:", extractedText.length)

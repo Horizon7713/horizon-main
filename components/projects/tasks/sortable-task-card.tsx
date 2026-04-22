@@ -226,19 +226,19 @@ export function SortableTaskCard({
               ) : null}
 
               {task.trade ? (
-                <MetaItem icon={<Hammer className="h-3.5 w-3.5" />} text={tradeLabel} />
-              ) : null}
+  <MetaItem icon={<Hammer className="h-3.5 w-3.5" />} text={tradeLabel ?? ""} />
+) : null}
 
-              {task.planned_end || task.due_date ? (
-                <MetaItem
-                  icon={<CalendarDays className="h-3.5 w-3.5" />}
-                  text={task.planned_end || task.due_date || ""}
-                />
-              ) : null}
+{task.planned_end || task.due_date ? (
+  <MetaItem
+    icon={<CalendarDays className="h-3.5 w-3.5" />}
+    text={String(task.planned_end ?? task.due_date ?? "")}
+  />
+) : null}
 
-              {task.priority && ["medium", "low"].includes(task.priority) ? (
-                <MetaItem icon={<Flag className="h-3.5 w-3.5" />} text={priorityLabel} />
-              ) : null}
+{task.priority && ["medium", "low"].includes(task.priority) ? (
+  <MetaItem icon={<Flag className="h-3.5 w-3.5" />} text={priorityLabel ?? ""} />
+) : null}
 
               {task.requires_homeowner_action ? (
                 <MetaItem icon={<Home className="h-3.5 w-3.5" />} text="Action needed" />
