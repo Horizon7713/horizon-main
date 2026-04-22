@@ -247,7 +247,7 @@ export function AppSidebar() {
 
             <SheetContent
               side="left"
-              className="w-full border-r border-[var(--border)] bg-[var(--background)] p-0 text-[var(--text)] sm:w-80"
+              className="w-[82vw] max-w-[280px] border-r border-[var(--border)] bg-[var(--background)] p-0 text-[var(--text)] sm:w-80"
             >
               <div className="flex h-full flex-col">
                 <div className="border-b border-[var(--border)] bg-[rgba(255,255,255,0.015)] px-5 py-5">

@@ -677,37 +677,11 @@
   background: #4a5972;
 }
 
-@media (max-width: 1024px) {
-  .app-page-inner {
-    max-width: 100%;
-  }
-}
-
-@media (max-width: 768px) {
-  .app-page {
-    padding-top: 4.5rem;
-  }
-
-  .app-page-inner {
-    padding: 1rem 1rem 1.25rem;
-  }
-
-  .app-panel-header,
-  .app-panel-body,
-  .app-stat-card {
-    padding: 1rem;
-  }
-
-  .app-title-lg {
-    font-size: 1.5rem;
-  }
-}
-
 @media (max-width: 768px) {
   html,
   body {
-    overflow-x: hidden;
     width: 100%;
+    overflow-x: hidden;
   }
 
   .app-shell,
@@ -718,9 +692,12 @@
     overflow-x: hidden;
   }
 
+  .app-page {
+    padding-top: 0;
+  }
+
   .app-page-inner {
-    padding-left: 0.75rem;
-    padding-right: 0.75rem;
+    padding: 0.875rem 0.875rem 1.25rem;
   }
 
   .app-panel,
@@ -733,8 +710,26 @@
   }
 
   .app-panel-header {
-    flex-wrap: wrap;
-    align-items: flex-start;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.875rem;
+  }
+
+  .app-panel-body,
+  .app-stat-card,
+  .app-list-item {
+    padding: 0.875rem;
+  }
+
+  .app-title-lg {
+    font-size: 1.25rem;
+    line-height: 1.15;
+  }
+
+  .app-stat-value {
+    font-size: 1.5rem;
   }
 
   .app-badge,
@@ -742,12 +737,22 @@
   .app-badge-success,
   .app-badge-warning {
     white-space: normal;
+    font-size: 0.625rem;
+    line-height: 1.2;
+    padding: 0.35rem 0.55rem;
   }
 
   .app-button,
   .app-button-secondary,
   .app-button-ghost {
+    width: 100%;
     min-height: 2.875rem;
+  }
+
+  .app-panel *,
+  .app-stat-card *,
+  .app-list-item * {
+    min-width: 0;
   }
 
   img,
@@ -756,5 +761,21 @@
   canvas {
     max-width: 100%;
     height: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-layout {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-sidebar {
+    width: min(280px, 82vw) !important;
+    max-width: 82vw !important;
+    min-width: 0 !important;
+  }
+
+  .app-sidebar * {
+    min-width: 0;
   }
 }
