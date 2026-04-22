@@ -3,8 +3,8 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import {
   buildPdfObjectKey,
   buildPublicFileUrl,
-  r2BucketName,
-  r2Client,
+  getR2BucketName,
+  getR2Client,
 } from "@/lib/cloudflare-r2";
 
 export async function POST(req: Request) {
@@ -26,9 +26,12 @@ export async function POST(req: Request) {
     const objectKey = buildPdfObjectKey(file.name);
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    await r2Client.send(
-      new PutObjectCommand({
-        Bucket: r2BucketName,
+    const r2Client = getR2Client();
+const r2BucketName = getR2BucketName();
+
+await r2Client.send(
+  new PutObjectCommand({
+    Bucket: r2BucketName,
         Key: objectKey,
         Body: buffer,
         ContentType: "application/pdf",

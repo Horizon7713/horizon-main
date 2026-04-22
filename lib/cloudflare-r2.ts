@@ -8,21 +8,36 @@ function requireEnv(name: string): string {
   return value;
 }
 
-export const r2AccountId = requireEnv("CLOUDFLARE_R2_ACCOUNT_ID");
-export const r2AccessKeyId = requireEnv("CLOUDFLARE_R2_ACCESS_KEY_ID");
-export const r2SecretAccessKey = requireEnv("CLOUDFLARE_R2_SECRET_ACCESS_KEY");
-export const r2BucketName = requireEnv("CLOUDFLARE_R2_BUCKET");
-export const r2PublicUrl =
-  process.env.CLOUDFLARE_R2_PUBLIC_URL?.replace(/\/$/, "") ?? "";
+export function getR2AccountId() {
+  return requireEnv("CLOUDFLARE_R2_ACCOUNT_ID");
+}
 
-export const r2Client = new S3Client({
-  region: "auto",
-  endpoint: `https://${r2AccountId}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: r2AccessKeyId,
-    secretAccessKey: r2SecretAccessKey,
-  },
-});
+export function getR2AccessKeyId() {
+  return requireEnv("CLOUDFLARE_R2_ACCESS_KEY_ID");
+}
+
+export function getR2SecretAccessKey() {
+  return requireEnv("CLOUDFLARE_R2_SECRET_ACCESS_KEY");
+}
+
+export function getR2BucketName() {
+  return requireEnv("CLOUDFLARE_R2_BUCKET");
+}
+
+export function getR2PublicUrl() {
+  return process.env.CLOUDFLARE_R2_PUBLIC_URL?.replace(/\/$/, "") ?? "";
+}
+
+export function getR2Client() {
+  return new S3Client({
+    region: "auto",
+    endpoint: `https://${getR2AccountId()}.r2.cloudflarestorage.com`,
+    credentials: {
+      accessKeyId: getR2AccessKeyId(),
+      secretAccessKey: getR2SecretAccessKey(),
+    },
+  });
+}
 
 export function buildPdfObjectKey(fileName: string) {
   const safeName = fileName.replace(/[^\w.\-]+/g, "_");
@@ -30,6 +45,7 @@ export function buildPdfObjectKey(fileName: string) {
 }
 
 export function buildPublicFileUrl(objectKey: string) {
+  const r2PublicUrl = getR2PublicUrl();
   if (!r2PublicUrl) return null;
   return `${r2PublicUrl}/${objectKey}`;
 }
