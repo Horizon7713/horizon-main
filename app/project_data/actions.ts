@@ -1904,7 +1904,7 @@ export async function getProjectUpdateSuggestions(projectId: string) {
       return { success: false, error: tasksError.message, data: [] }
     }
 
-    const allTasks = (tasks || []) as ProjectTaskAiShape[]
+    const allTasks = ((tasks ?? []) as unknown) as ProjectTaskAiShape[]
     const suggestions: {
       key: string
       type: ProjectUpdateType
@@ -2045,7 +2045,7 @@ export async function getProjectCopilotRecap(projectId: string) {
     throw new Error(tasksError.message)
   }
 
-  const allTasks = (tasks || []) as ProjectTaskAiShape[]
+  const allTasks = ((tasks ?? []) as unknown) as ProjectTaskAiShape[]
   const client = new OpenAI({ apiKey })
 
   const prompt = buildProjectCopilotPrompt({
