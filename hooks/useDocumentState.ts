@@ -14,7 +14,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import type { Markup, PageScale } from '@/lib/pdf-viewer-types'
+import type { PdfMarkup as Markup } from '@/lib/pdf-viewer-types'
+
+type PageScale = {
+  pageNumber: number
+  inchesPerPixel: number
+  label?: string
+}
+
 import {
   type DocumentEvent,
   type DocumentState,
@@ -272,7 +279,7 @@ export function useDocumentState(documentId: string | null): UseDocumentStateRet
       event_type: 'MARKUP_CREATED',
       payload: { markup },
       markup_id: markup.id,
-      page_number: markup.pageNumber,
+      page_number: markup.pageIndex,
       user_id: null,
       created_at: new Date().toISOString(),
     }
@@ -291,7 +298,7 @@ export function useDocumentState(documentId: string | null): UseDocumentStateRet
       event_type: 'MARKUP_UPDATED',
       payload: { markupId: markup.id, previous, current: markup },
       markup_id: markup.id,
-      page_number: markup.pageNumber,
+      page_number: markup.pageIndex,
       user_id: null,
       created_at: new Date().toISOString(),
     }
@@ -310,7 +317,7 @@ export function useDocumentState(documentId: string | null): UseDocumentStateRet
       event_type: 'MARKUP_DELETED',
       payload: { markupId, deletedMarkup: deleted },
       markup_id: markupId,
-      page_number: pageNumber ?? deleted?.pageNumber ?? null,
+      page_number: pageNumber ?? deleted?.pageIndex ?? null,
       user_id: null,
       created_at: new Date().toISOString(),
     }
@@ -354,7 +361,7 @@ export function useDocumentState(documentId: string | null): UseDocumentStateRet
     if (documentId) {
       if (event.event_type === 'MARKUP_CREATED') {
         const m = event.payload.markup as Markup | undefined
-        if (m) serverDeleteMarkup(documentId, m.id, m.pageNumber).catch(() => {})
+        if (m) serverDeleteMarkup(documentId, m.id, m.pageIndex).catch(() => {})
       } else if (event.event_type === 'MARKUP_UPDATED') {
         const prev = event.payload.previous as Markup | undefined
         if (prev) serverUpdateMarkup(documentId, prev).catch(() => {})
