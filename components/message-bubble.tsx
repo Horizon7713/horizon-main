@@ -289,7 +289,7 @@ export function MessageBubble({
       mimeType: m.mime_type,
     }))
 
-    const resolvedProjectName = receipt.projects?.name || "Unknown Project"
+    const resolvedProjectName = receipt.projects?.[0]?.name || "Unknown Project"
 
     setReceiptData({
       totalPrice: receipt.total_price.toString(),

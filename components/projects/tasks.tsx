@@ -260,7 +260,7 @@ export function ProjectTasks({ projectId, projectType }: ProjectTasksProps) {
             planned_start: task.planned_start,
             planned_end: task.planned_end,
             homeowner_action_text: task.homeowner_action_text,
-            homeownerVisibleNote: task.homeowner_visible_note ?? null,
+            homeowner_visible_note: task.homeowner_visible_note ?? null,
             is_critical: task.is_critical,
             total_float_days: task.total_float_days,
           }) satisfies ProjectHealthBucketItem,

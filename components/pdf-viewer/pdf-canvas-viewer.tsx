@@ -66,12 +66,6 @@ type PdfJsLib = {
   }) => PdfLoadingTask;
 };
 
-declare global {
-  interface Window {
-    pdfjsLib?: PdfJsLib;
-  }
-}
-
 const ZONE_SNAP_DISTANCE = 16;
 const PDFJS_VERSION = "2.16.105";
 const PDFJS_SCRIPT_SRC = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.min.js`;
