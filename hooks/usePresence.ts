@@ -89,7 +89,7 @@ export function usePresence(
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<PresenceUser>()
+        const state = channel.presenceState() as Record<string, PresenceUser[]>
         const others: PresenceUser[] = []
         for (const [key, presences] of Object.entries(state)) {
           if (key === userId) continue
@@ -98,7 +98,7 @@ export function usePresence(
         }
         setPeers(others)
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           await channel.track(initialPresence)
         }
