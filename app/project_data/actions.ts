@@ -1254,7 +1254,9 @@ export async function buildSchedule(projectId: string) {
       return { success: false, error: tasksError.message }
     }
 
-    const allTasks = (tasks || []) as ProjectTaskAiShape[]
+    const allTasks: ProjectTaskAiShape[] = Array.isArray(tasks)
+  ? ((tasks as unknown) as ProjectTaskAiShape[])
+  : []
     if (allTasks.length === 0) {
       return { success: true }
     }
