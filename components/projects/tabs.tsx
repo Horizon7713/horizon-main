@@ -17,7 +17,7 @@ type TabType = "tasks" | "receipts" | "timecards" | "media" | "users"
 
 interface ProjectTabsProps {
   projectId: string
-  initialTasks: ProjectTask[]
+  initialTasks: Task[]
   projectType?: string
 }
 
@@ -47,7 +47,7 @@ interface Receipt {
   uploader?: {
     first_name: string
     last_name: string
-  }
+  } | null
 }
 
 interface Timecard {
@@ -59,7 +59,7 @@ interface Timecard {
   uploader?: {
     first_name: string
     last_name: string
-  }
+  } | null
 }
 
 interface Media {
@@ -72,7 +72,7 @@ interface Media {
   uploader?: {
     first_name: string
     last_name: string
-  }
+  } | null
 }
 
 interface ProjectUser {
@@ -86,7 +86,7 @@ interface ProjectUser {
     last_name: string
     email: string
     role: string
-  }
+  } | null
 }
 
 function tabIcon(tab: TabType) {
@@ -204,7 +204,7 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
       .order("created_at", { ascending: false })
 
     if (!error && data) {
-      setReceipts(data as Receipt[])
+      setReceipts(data as unknown as Receipt[])
     }
     setLoading(false)
   }
@@ -231,7 +231,7 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
       .order("created_at", { ascending: false })
 
     if (!error && data) {
-      setTimecards(data as Timecard[])
+      setTimecards(data as unknown as Timecard[])
     }
     setLoading(false)
   }
@@ -259,7 +259,7 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
       .order("created_at", { ascending: false })
 
     if (!error && data) {
-      setMedia(data as Media[])
+      setMedia(data as unknown as Media[])
     }
     setLoading(false)
   }
@@ -288,7 +288,7 @@ export function ProjectTabs({ projectId, initialTasks, projectType }: ProjectTab
       .order("created_at", { ascending: true })
 
     if (!error && data) {
-      setProjectUsers(data as ProjectUser[])
+      setProjectUsers(data as unknown as ProjectUser[])
     }
     setLoading(false)
   }
