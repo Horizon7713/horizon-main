@@ -6,6 +6,11 @@ frontend:
         - npm ci
     build:
       commands:
+        - env | grep -e OPENAI_API_KEY >> .env.production
+        - env | grep -e R2_ >> .env.production
+        - env | grep -e AWS_ >> .env.production
+        - env | grep -e NEXT_PUBLIC_ >> .env.production
+        - env | grep -e CLOUDFLARE_R2_ >> .env.production
         - npm run build
   artifacts:
     baseDirectory: .next
