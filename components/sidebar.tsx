@@ -31,7 +31,16 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase/client"
 
-const allNavigationItems = [
+type NavigationItem = {
+  title: string
+  href: string
+  icon: React.ComponentType<{ className?: string }>
+  permissionKey?: keyof RolePermissions
+  restrictedRoles?: Array<"contractor" | "subcontractor">
+  alwaysVisible?: boolean
+}
+
+const allNavigationItems: readonly NavigationItem[] = [
   {
     title: "Dashboard",
     href: "/dashboard",
@@ -142,8 +151,9 @@ export function AppSidebar() {
       if ("alwaysVisible" in item && item.alwaysVisible) return true
       if (!rolePermissions) return false
       if ("restrictedRoles" in item && item.restrictedRoles) {
-        return item.restrictedRoles.includes(userRole || "")
-      }
+  if (userRole !== "contractor" && userRole !== "subcontractor") return false
+  return item.restrictedRoles.includes(userRole)
+}
       return rolePermissions[item.permissionKey as keyof RolePermissions] === true
     })
   }, [rolePermissions, userRole])
