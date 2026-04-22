@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Markup } from '@/lib/pdf-viewer-types'
+import type { PdfMarkup as Markup } from '@/lib/pdf-viewer-types'
 
 interface UsePDFMarkupsOptions {
   pdfFileId?: string
