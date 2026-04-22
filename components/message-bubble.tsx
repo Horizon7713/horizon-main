@@ -1,6 +1,6 @@
 "use client"
 
-import { File, Receipt, Clock, ImageIcon, Play, ExternalLink } from "lucide-react"
+import { File, Receipt, Clock, ImageIcon, ExternalLink } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { supabase } from "@/lib/supabase/client"
 import { useSignedStorageUrl } from "@/hooks/useSignedStorageUrl"
@@ -27,47 +27,6 @@ interface MessageBubbleProps {
   isCurrentUser: boolean
   senderName?: string
   senderInitials?: string
-}
-
-function SignedReceiptImageCard({
-  fileUrl,
-  fileName,
-}: {
-  fileUrl: string
-  fileName: string
-}) {
-  const { url: imageUrl } = useSignedStorageUrl(fileUrl, "receipts")
-
-  if (!imageUrl) return null
-
-  return (
-    <button
-      type="button"
-      onClick={() => window.open(imageUrl, "_blank")}
-      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900"
-    >
-      <div className="flex items-center gap-3 p-3">
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-800 bg-black">
-          <img
-            src={imageUrl}
-            alt="Receipt"
-            className="h-full w-full object-cover"
-          />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-zinc-100">
-            {fileName}
-          </div>
-          <div className="mt-1 text-xs text-zinc-500">
-            Image attachment
-          </div>
-        </div>
-
-        <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
-      </div>
-    </button>
-  )
 }
 
 function FileCard({
@@ -145,14 +104,116 @@ function MediaImageCard({
 function MediaVideoCard({ src }: { src: string }) {
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-800 bg-black">
-      <video
-        src={src}
-        controls
-        className="max-h-[320px] w-full"
-      >
+      <video src={src} controls className="max-h-[320px] w-full">
         Your browser does not support the video tag.
       </video>
     </div>
+  )
+}
+
+function SignedImageCard({
+  fileUrl,
+  bucket,
+  fileName,
+  alt,
+  onOpen,
+}: {
+  fileUrl: string
+  bucket: string
+  fileName: string
+  alt: string
+  onOpen: (url: string, fileName: string) => void
+}) {
+  const { url } = useSignedStorageUrl(fileUrl, bucket)
+
+  if (!url) return null
+
+  return (
+    <MediaImageCard
+      src={url}
+      alt={alt}
+      onOpen={() => onOpen(url, fileName)}
+    />
+  )
+}
+
+function SignedVideoCard({
+  fileUrl,
+  bucket,
+}: {
+  fileUrl: string
+  bucket: string
+}) {
+  const { url } = useSignedStorageUrl(fileUrl, bucket)
+
+  if (!url) return null
+
+  return <MediaVideoCard src={url} />
+}
+
+function SignedFileCard({
+  fileUrl,
+  bucket,
+  fileName,
+  label,
+  isCurrentUser,
+}: {
+  fileUrl: string
+  bucket: string
+  fileName: string
+  label: string
+  isCurrentUser: boolean
+}) {
+  const { url } = useSignedStorageUrl(fileUrl, bucket)
+
+  if (!url) return null
+
+  return (
+    <FileCard
+      href={url}
+      fileName={fileName}
+      label={label}
+      isCurrentUser={isCurrentUser}
+    />
+  )
+}
+
+function SignedReceiptImageCard({
+  fileUrl,
+  fileName,
+}: {
+  fileUrl: string
+  fileName: string
+}) {
+  const { url: imageUrl } = useSignedStorageUrl(fileUrl, "receipts")
+
+  if (!imageUrl) return null
+
+  return (
+    <button
+      type="button"
+      onClick={() => window.open(imageUrl, "_blank")}
+      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900"
+    >
+      <div className="flex items-center gap-3 p-3">
+        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-800 bg-black">
+          <img
+            src={imageUrl}
+            alt="Receipt"
+            className="h-full w-full object-cover"
+          />
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-zinc-100">
+            {fileName}
+          </div>
+          <div className="mt-1 text-xs text-zinc-500">Image attachment</div>
+        </div>
+
+        <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
+      </div>
+    </button>
   )
 }
 
@@ -422,14 +483,21 @@ export function MessageBubble({
                   }
 
                   if (isVideo) {
-                    return <MediaVideoCard key={msg.id} src={msg.file_url} />
+                    return (
+                      <SignedVideoCard
+                        key={msg.id}
+                        fileUrl={msg.file_url}
+                        bucket="receipts"
+                      />
+                    )
                   }
 
                   if (isPdf) {
                     return (
-                      <FileCard
+                      <SignedFileCard
                         key={msg.id}
-                        href={msg.file_url}
+                        fileUrl={msg.file_url}
+                        bucket="receipts"
                         fileName={fileName}
                         label="PDF attachment"
                         isCurrentUser={isCurrentUser}
@@ -438,9 +506,10 @@ export function MessageBubble({
                   }
 
                   return (
-                    <FileCard
+                    <SignedFileCard
                       key={msg.id}
-                      href={msg.file_url}
+                      fileUrl={msg.file_url}
+                      bucket="receipts"
                       fileName={fileName}
                       label="File attachment"
                       isCurrentUser={isCurrentUser}
@@ -474,24 +543,33 @@ export function MessageBubble({
 
                   if (isImage) {
                     return (
-                      <MediaImageCard
+                      <SignedImageCard
                         key={msg.id}
-                        src={msg.file_url}
+                        fileUrl={msg.file_url}
+                        bucket="timecards"
+                        fileName={fileName}
                         alt="Time card image"
-                        onOpen={() => openImagePreview(msg.file_url!, fileName)}
+                        onOpen={openImagePreview}
                       />
                     )
                   }
 
                   if (isVideo) {
-                    return <MediaVideoCard key={msg.id} src={msg.file_url} />
+                    return (
+                      <SignedVideoCard
+                        key={msg.id}
+                        fileUrl={msg.file_url}
+                        bucket="timecards"
+                      />
+                    )
                   }
 
                   if (isPdf) {
                     return (
-                      <FileCard
+                      <SignedFileCard
                         key={msg.id}
-                        href={msg.file_url}
+                        fileUrl={msg.file_url}
+                        bucket="timecards"
                         fileName={fileName}
                         label="PDF attachment"
                         isCurrentUser={isCurrentUser}
@@ -500,9 +578,10 @@ export function MessageBubble({
                   }
 
                   return (
-                    <FileCard
+                    <SignedFileCard
                       key={msg.id}
-                      href={msg.file_url}
+                      fileUrl={msg.file_url}
+                      bucket="timecards"
                       fileName={fileName}
                       label="File attachment"
                       isCurrentUser={isCurrentUser}
@@ -529,30 +608,30 @@ export function MessageBubble({
                 ))}
 
                 {mediaFiles.map((msg) => {
-                  const mimeType = msg.mime_type || ""
-                  const isImage = mimeType.startsWith("image/")
-                  const isVideo = mimeType.startsWith("video/")
-                  const fileName = msg.file_url?.split("/").pop() || "media-file"
+  const mimeType = msg.mime_type || ""
+  const isImage = mimeType.startsWith("image/")
+  const isVideo = mimeType.startsWith("video/")
+  const fileName = msg.file_url?.split("/").pop() || "media-file"
 
-                  if (!msg.file_url) return null
+  if (!msg.file_url) return null
 
-                  if (isImage) {
-                    return (
-                      <MediaImageCard
-                        key={msg.id}
-                        src={msg.file_url}
-                        alt="Media image"
-                        onOpen={() => openImagePreview(msg.file_url!, fileName)}
-                      />
-                    )
-                  }
+  if (isImage) {
+    return (
+      <MediaImageCard
+        key={msg.id}
+        src={msg.file_url}
+        alt="Media image"
+        onOpen={() => openImagePreview(msg.file_url as string, fileName)}
+      />
+    )
+  }
 
-                  if (isVideo) {
-                    return <MediaVideoCard key={msg.id} src={msg.file_url} />
-                  }
+  if (isVideo) {
+    return <MediaVideoCard key={msg.id} src={msg.file_url} />
+  }
 
-                  return null
-                })}
+  return null
+})}
               </div>
             ) : null}
 
@@ -569,24 +648,33 @@ export function MessageBubble({
 
                   if (isImage) {
                     return (
-                      <MediaImageCard
+                      <SignedImageCard
                         key={msg.id}
-                        src={msg.file_url}
+                        fileUrl={msg.file_url}
+                        bucket="files"
+                        fileName={fileName}
                         alt="Shared image"
-                        onOpen={() => openImagePreview(msg.file_url!, fileName)}
+                        onOpen={openImagePreview}
                       />
                     )
                   }
 
                   if (isVideo) {
-                    return <MediaVideoCard key={msg.id} src={msg.file_url} />
+                    return (
+                      <SignedVideoCard
+                        key={msg.id}
+                        fileUrl={msg.file_url}
+                        bucket="files"
+                      />
+                    )
                   }
 
                   if (isPdf) {
                     return (
-                      <FileCard
+                      <SignedFileCard
                         key={msg.id}
-                        href={msg.file_url}
+                        fileUrl={msg.file_url}
+                        bucket="files"
                         fileName={fileName}
                         label="PDF attachment"
                         isCurrentUser={isCurrentUser}
@@ -595,9 +683,10 @@ export function MessageBubble({
                   }
 
                   return (
-                    <FileCard
+                    <SignedFileCard
                       key={msg.id}
-                      href={msg.file_url}
+                      fileUrl={msg.file_url}
+                      bucket="files"
                       fileName={fileName}
                       label="File attachment"
                       isCurrentUser={isCurrentUser}

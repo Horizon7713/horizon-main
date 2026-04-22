@@ -702,3 +702,59 @@
     font-size: 1.5rem;
   }
 }
+
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
+  .app-shell,
+  .app-page,
+  .app-page-inner {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .app-page-inner {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .app-panel,
+  .app-stat-card,
+  .app-list-item,
+  .app-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .app-panel-header {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  .app-badge,
+  .app-badge-primary,
+  .app-badge-success,
+  .app-badge-warning {
+    white-space: normal;
+  }
+
+  .app-button,
+  .app-button-secondary,
+  .app-button-ghost {
+    min-height: 2.875rem;
+  }
+
+  img,
+  svg,
+  video,
+  canvas {
+    max-width: 100%;
+    height: auto;
+  }
+}

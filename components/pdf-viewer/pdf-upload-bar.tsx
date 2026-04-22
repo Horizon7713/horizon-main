@@ -29,62 +29,45 @@ export function PdfUploadBar({ onUploaded }: PdfUploadBarProps) {
 
     try {
       const signResponse = await fetch("/api/uploads/r2/sign", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    fileName: file.name,
-    contentType: file.type,
-  }),
-});
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          contentType: file.type,
+        }),
+      });
 
-const signText = await signResponse.text();
-const signData = signText ? JSON.parse(signText) : null;
+      const signText = await signResponse.text();
+      const signData = signText ? JSON.parse(signText) : null;
 
-if (!signResponse.ok) {
-  throw new Error(signData?.error || "Failed to get upload URL");
-}
+      if (!signResponse.ok) {
+        throw new Error(signData?.error || "Failed to get upload URL");
+      }
 
-const uploadResponse = await fetch(signData.uploadUrl, {
-  method: "PUT",
-  headers: {
-    "Content-Type": file.type,
-  },
-  body: file,
-});
+      const uploadResponse = await fetch(signData.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type,
+        },
+        body: file,
+      });
 
-if (!uploadResponse.ok) {
-  throw new Error("Direct upload to storage failed");
-}
-
-setStatus("Upload complete.");
-
-onUploaded?.({
-  fileName: signData.fileName,
-  objectKey: signData.objectKey,
-  fileUrl: signData.fileUrl,
-});
-
-      const text = await response.text();
-      const data = text ? JSON.parse(text) : null;
-
-      if (!response.ok) {
-        throw new Error(data?.error || "Upload failed");
+      if (!uploadResponse.ok) {
+        throw new Error("Direct upload to storage failed");
       }
 
       setStatus("Upload complete.");
 
       onUploaded?.({
-        fileName: data.fileName,
-        objectKey: data.objectKey,
-        fileUrl: data.fileUrl,
+        fileName: signData.fileName,
+        objectKey: signData.objectKey,
+        fileUrl: signData.fileUrl,
       });
     } catch (error) {
       console.error("PDF upload failed:", error);
-      setStatus(
-        error instanceof Error ? error.message : "Upload failed."
-      );
+      setStatus(error instanceof Error ? error.message : "Upload failed.");
     } finally {
       setIsUploading(false);
       if (inputRef.current) {

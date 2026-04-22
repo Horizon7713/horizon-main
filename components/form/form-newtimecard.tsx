@@ -132,7 +132,7 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
         const uploadResult = await uploadResponse.json()
         fileData.push({
           url: uploadResult.url,
-          mimeType: uploadResult.type,
+          mimeType: uploadResult.contentType,
         })
       }
 

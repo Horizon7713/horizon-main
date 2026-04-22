@@ -187,7 +187,7 @@ export async function runDocumentAnalysis(documentId: string): Promise<AnalysisR
     const context = await gatherAnalysisContext(documentId)
 
     const { object: output } = await generateObject({
-  model: 'xai/grok-3-mini',
+  model:'openai/gpt-5-mini',
   schema: analysisOutputSchema,
   prompt: buildAnalysisPrompt(context),
 })

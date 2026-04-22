@@ -234,7 +234,7 @@ export function FormNewReceipt({
           const uploadResult = await uploadResponse.json()
           fileData.push({
             url: uploadResult.url,
-            mimeType: uploadResult.type,
+            mimeType: uploadResult.contentType,
           })
         }
 
@@ -348,65 +348,61 @@ export function FormNewReceipt({
       const base64 = await fileToBase64(file)
 
       // Step 1: Extract text from image using OCR (client-side)
-      console.log("[v0] Starting OCR extraction from receipt image...")
-      let ocrText = ""
-      let useOCR = true
-
-      try {
-        // Dynamically import Tesseract for client-side OCR
-        const Tesseract = (await import("tesseract.js")).default
-        const worker = await Tesseract.createWorker("eng")
-        
-        // Convert base64 to image for Tesseract
-        const img = new Image()
-        img.crossOrigin = "anonymous"
-        img.src = `data:${file.type};base64,${base64}`
-        
-        await new Promise((resolve) => {
-          img.onload = resolve
-        })
-
-        const result = await worker.recognize(img)
-        ocrText = result.data.text
-        console.log("[v0] OCR extraction complete. Text length:", ocrText.length)
-        console.log("[v0] OCR confidence:", result.data.confidence)
-        
-        await worker.terminate()
-      } catch (ocrError) {
-        console.warn("[v0] OCR extraction failed, falling back to image-based analysis:", ocrError)
-        useOCR = false
-      }
-
-      // Step 2: Send to API for parsing
-      console.log(`[v0] Sending receipt to Grok for analysis (${useOCR ? "OCR text" : "image"})...`)
       
-      const requestBody = useOCR
-        ? {
-            method: "analyzeOCR",
-            ocrText: ocrText,
-          }
-        : {
-            method: "analyzeImage",
-            imageBase64: base64,
-            mimeType: file.type,
-          }
+      console.log("[v0] Starting OCR extraction from receipt image...")
+let ocrText = ""
 
-      const response = await fetch("/api/analyze-receipt", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      })
+try {
+  const Tesseract = (await import("tesseract.js")).default
+  const worker = await Tesseract.createWorker("eng")
 
-      if (!response.ok) {
-        const errorData = await response.text()
-        console.error("[v0] API error response status:", response.status)
-        console.error("[v0] API error response body:", errorData)
-        throw new Error(`API error: ${response.status} - ${errorData}`)
-      }
+  const img = new Image()
+  img.crossOrigin = "anonymous"
+  img.src = `data:${file.type};base64,${base64}`
+
+  await new Promise((resolve, reject) => {
+    img.onload = resolve
+    img.onerror = reject
+  })
+
+  const ocrResult = await worker.recognize(img)
+  ocrText = ocrResult.data.text
+
+  console.log("[v0] OCR extraction complete. Text length:", ocrText.length)
+  console.log("[v0] OCR confidence:", ocrResult.data.confidence)
+
+  await worker.terminate()
+} catch (ocrError) {
+  console.error("[v0] OCR extraction failed:", ocrError)
+
+  throw new Error(
+    ocrError instanceof Error
+      ? `OCR failed: ${ocrError.message}`
+      : "OCR failed for an unknown reason."
+  )
+}
+
+if (!ocrText.trim()) {
+  throw new Error("No readable text was found on the receipt.")
+}
+
+console.log("[v0] Sending OCR text to ChatGPT for analysis...")
+
+const response = await fetch("/api/analyze-receipt", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    method: "analyzeOCR",
+    ocrText,
+  }),
+})
 
       const result = await response.json()
+
+      console.log("[v0] Receipt analysis response status:", response.status)
+console.log("[v0] Receipt analysis parsed result:", result)
 
       if (result.success && result.data) {
         const confidencePercentage = result.data.confidencePercentage || 0
@@ -461,15 +457,23 @@ export function FormNewReceipt({
             cameraInputRef.current.value = ""
           }
         }
-      } else {
+            } else {
+        console.log("[v0] Receipt analysis raw result:", result)
         console.log("[v0] Could not extract data from receipt")
-        setError("Could not automatically extract data from receipt. Please take a clearer photo.")
+
+        const backendError =
+          result && typeof result === "object" && "error" in result
+            ? String(result.error)
+            : "Could not automatically extract data from receipt."
+
+        setError(backendError)
         setSelectedFiles([])
         if (fileInputRef.current) {
           fileInputRef.current.value = ""
         }
       }
-    } catch (err) {
+
+          } catch (err) {
       console.error("[v0] Error analyzing receipt:", err)
       const errorMessage = err instanceof Error ? err.message : "Failed to analyze receipt"
       setError(`Error: ${errorMessage}. Please try again.`)

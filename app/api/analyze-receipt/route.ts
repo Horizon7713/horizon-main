@@ -6,14 +6,11 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { method, imageBase64, mimeType, ocrText } = body
 
-    // Support both OCR-based and image-based analysis
     if (method === "analyzeOCR" && ocrText) {
-      // Fast path: OCR text has already been extracted on client
       console.log("[v0] API route: Using OCR text analysis...")
       const result = await analyzeReceiptWithOCR(ocrText)
       return NextResponse.json(result)
     } else if ((method === "analyzeImage" || !method) && imageBase64 && mimeType) {
-      // Fallback: Use image-based analysis
       console.log("[v0] API route: Using image-based analysis...")
       const result = await analyzeReceipt(imageBase64, mimeType)
       return NextResponse.json(result)
@@ -25,6 +22,13 @@ export async function POST(req: Request) {
     }
   } catch (error) {
     console.error("[v0] Error in analyze-receipt API:", error)
-    return NextResponse.json({ success: false, error: "Internal server error" }, { status: 500 })
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+      },
+      { status: 500 }
+    )
   }
 }

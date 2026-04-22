@@ -144,34 +144,37 @@ export function FormAttachMedia({ userId, receiverId, onSuccess, onCancel, sendM
 
       // Upload files
       const fileData: Array<{ url: string; mimeType: string }> = []
-      for (const file of selectedFiles) {
-        const uploadFormData = new FormData()
-        uploadFormData.append("file", file)
 
-        const uploadResponse = await fetch("/api/upload", {
-          method: "POST",
-          body: uploadFormData,
-        })
+for (const file of selectedFiles) {
+  const uploadResponse = await fetch("/api/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "x-filename": encodeURIComponent(file.name),
+    },
+    body: file,
+  })
 
-        if (!uploadResponse.ok) {
-          let errorMessage = `Failed to upload file: ${file.name}`
-          try {
-            const errorData = await uploadResponse.json()
-            errorMessage = errorData.details || errorData.error || errorMessage
-          } catch {
-            errorMessage = `${errorMessage} (${uploadResponse.status} ${uploadResponse.statusText})`
-          }
-          console.error(`[v0] ${errorMessage}`)
-          setError(errorMessage)
-          continue
-        }
+  if (!uploadResponse.ok) {
+    let errorMessage = `Failed to upload file: ${file.name}`
+    try {
+      const errorData = await uploadResponse.json()
+      errorMessage = errorData.details || errorData.error || errorMessage
+    } catch {
+      errorMessage = `${errorMessage} (${uploadResponse.status} ${uploadResponse.statusText})`
+    }
+    console.error(`[v0] ${errorMessage}`)
+    setError(errorMessage)
+    continue
+  }
 
-        const uploadResult = await uploadResponse.json()
-        fileData.push({
-          url: uploadResult.url,
-          mimeType: uploadResult.type,
-        })
-      }
+  const uploadResult = await uploadResponse.json()
+
+  fileData.push({
+    url: uploadResult.url,
+    mimeType: uploadResult.contentType,
+  })
+}
 
       if (fileData.length === 0) {
         setError("Failed to upload files")

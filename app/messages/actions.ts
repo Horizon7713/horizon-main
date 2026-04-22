@@ -1,5 +1,6 @@
 "use server"
 
+import { openai } from "@ai-sdk/openai"
 import { generateObject } from "ai"
 import type { ModelMessage } from "ai"
 import { z } from "zod"
@@ -11,8 +12,8 @@ const receiptResultSchema = z.object({
     .array(
       z.object({
         name: z.string().describe("The item name"),
-        quantity: z.number().optional().describe("The quantity"),
-        price: z.number().optional().describe("The item price"),
+        quantity: z.number().nullable().describe("The quantity"),
+        price: z.number().nullable().describe("The item price"),
       })
     )
     .describe("List of items purchased"),
@@ -59,7 +60,7 @@ Always return valid numbers for total_price and prices. If a field cannot be det
     ]
 
     const { object } = await generateObject({
-      model: "openai/gpt-4o",
+      model: "openai/gpt-5-mini",
       schema: receiptResultSchema,
       messages,
     })
@@ -105,9 +106,9 @@ ${ocrText}`,
     ]
 
     const { object } = await generateObject({
-      model: "openai/gpt-4o",
-      schema: receiptResultSchema,
-      system: `You are an expert at extracting structured data from receipt text. Parse OCR-extracted receipt text and extract the total price, vendor name, and all items purchased.
+  model: openai("gpt-5-mini"),
+  schema: receiptResultSchema,
+  system: `You are an expert at extracting structured data from receipt text. Parse OCR-extracted receipt text and extract the total price, vendor name, and all items purchased.
 
 CRITICAL EXTRACTION RULES:
 1. Total Price: Extract ONLY the final "Total" line - never use subtotals, taxes, or discounts. Must be a valid number.
@@ -117,8 +118,8 @@ CRITICAL EXTRACTION RULES:
 5. Image Quality: Assess based on OCR text clarity - good if clear and complete, poor if some text is garbled, unreadable if mostly illegible.
 
 Always return valid numbers for total_price and prices. If a field cannot be determined, use sensible defaults.`,
-      messages,
-    })
+  messages,
+})
 
     const elapsedTime = Date.now() - startTime
     console.log("[v0] Receipt analysis result:", object)
@@ -138,10 +139,14 @@ Always return valid numbers for total_price and prices. If a field cannot be det
       },
     }
   } catch (error) {
-    console.error("[v0] Error analyzing receipt with OCR:", error)
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : "Failed to analyze receipt",
-    }
+  console.error("[v0] Error analyzing receipt with OCR:", error)
+
+  return {
+    success: false,
+    error:
+      error instanceof Error
+        ? `${error.name}: ${error.message}`
+        : `Unknown error: ${String(error)}`,
   }
+}
 }

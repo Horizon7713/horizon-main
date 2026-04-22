@@ -87,34 +87,42 @@ export function MessageInput({
       const bundleId = crypto.randomUUID()
 
       const fileData: Array<{ url: string; mimeType: string }> = []
-      for (const file of selectedFiles) {
-        const uploadFormData = new FormData()
-        uploadFormData.append("file", file)
 
+      for (const file of selectedFiles) {
         try {
           const uploadResponse = await fetch("/api/upload", {
             method: "POST",
-            body: uploadFormData,
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+              "x-filename": encodeURIComponent(file.name),
+            },
+            body: file,
           })
 
           if (!uploadResponse.ok) {
             let errorMessage = `Failed to upload file: ${file.name}`
+
             try {
               const errorData = await uploadResponse.json()
               errorMessage = errorData.details || errorData.error || errorMessage
             } catch {
               errorMessage = `${errorMessage} (${uploadResponse.status} ${uploadResponse.statusText})`
             }
+
             console.error(`[v0] ${errorMessage}`)
             alert(errorMessage)
             continue
           }
 
           const uploadResult = await uploadResponse.json()
-          fileData.push({
-            url: uploadResult.url,
-            mimeType: uploadResult.type,
-          })
+
+console.log("uploadResult.url", uploadResult.url)
+console.log("uploadResult.contentType", uploadResult.contentType)
+
+fileData.push({
+  url: uploadResult.url,
+  mimeType: uploadResult.contentType,
+})
         } catch (uploadError) {
           console.error(`[v0] Upload error for ${file.name}:`, uploadError)
           alert(
@@ -175,6 +183,7 @@ export function MessageInput({
           }
           return
         }
+
         if (hasNonMediaFiles && !newFilesAreNonMedia) {
           alert("Cannot mix other file types with media files (images/videos)")
           if (fileInputRef.current) {

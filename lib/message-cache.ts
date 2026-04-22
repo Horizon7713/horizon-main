@@ -82,13 +82,18 @@ class MessageCache {
     return [userId, userId2].sort().join("-")
   }
 
-  private async cacheImageBlob(url: string): Promise<void> {
+    private async cacheImageBlob(url: string): Promise<void> {
     try {
+      if (!url || !url.startsWith("http")) return
+
       const response = await fetch(url)
       if (!response.ok) return
 
       const blob = await response.blob()
+      if (!blob || blob.size === 0) return
+
       const mimeType = response.headers.get("content-type") || blob.type
+      if (!mimeType.startsWith("image/")) return
 
       await this.init()
       if (!this.db) return
@@ -109,8 +114,8 @@ class MessageCache {
         transaction.oncomplete = () => resolve()
         transaction.onerror = () => reject(transaction.error)
       })
-    } catch (error) {
-      console.error("[v0] Failed to cache image blob:", error)
+    } catch {
+      return
     }
   }
 
