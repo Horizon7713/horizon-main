@@ -28,13 +28,43 @@ export function PdfUploadBar({ onUploaded }: PdfUploadBarProps) {
     setStatus("Uploading PDF...");
 
     try {
-      const formData = new FormData();
-      formData.append("file", file);
+      const signResponse = await fetch("/api/uploads/r2/sign", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+  },
+  body: JSON.stringify({
+    fileName: file.name,
+    contentType: file.type,
+  }),
+});
 
-      const response = await fetch("/api/uploads/r2/sign", {
-        method: "POST",
-        body: formData,
-      });
+const signText = await signResponse.text();
+const signData = signText ? JSON.parse(signText) : null;
+
+if (!signResponse.ok) {
+  throw new Error(signData?.error || "Failed to get upload URL");
+}
+
+const uploadResponse = await fetch(signData.uploadUrl, {
+  method: "PUT",
+  headers: {
+    "Content-Type": file.type,
+  },
+  body: file,
+});
+
+if (!uploadResponse.ok) {
+  throw new Error("Direct upload to storage failed");
+}
+
+setStatus("Upload complete.");
+
+onUploaded?.({
+  fileName: signData.fileName,
+  objectKey: signData.objectKey,
+  fileUrl: signData.fileUrl,
+});
 
       const text = await response.text();
       const data = text ? JSON.parse(text) : null;

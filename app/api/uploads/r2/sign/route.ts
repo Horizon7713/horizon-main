@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import {
   buildPdfObjectKey,
   buildPublicFileUrl,
@@ -9,47 +10,50 @@ import {
 
 export async function POST(req: Request) {
   try {
-    const formData = await req.formData();
-    const file = formData.get("file");
+    const body = await req.json();
+    const fileName = body?.fileName;
+    const contentType = body?.contentType;
 
-    if (!(file instanceof File)) {
-      return NextResponse.json({ error: "Missing file" }, { status: 400 });
+    if (!fileName || typeof fileName !== "string") {
+      return NextResponse.json({ error: "Missing fileName" }, { status: 400 });
     }
 
-    if (file.type !== "application/pdf") {
+    if (contentType !== "application/pdf") {
       return NextResponse.json(
         { error: "Only PDF files are allowed" },
         { status: 400 }
       );
     }
 
-    const objectKey = buildPdfObjectKey(file.name);
-    const buffer = Buffer.from(await file.arrayBuffer());
-
+    const objectKey = buildPdfObjectKey(fileName);
     const r2Client = getR2Client();
-const r2BucketName = getR2BucketName();
+    const r2BucketName = getR2BucketName();
 
-await r2Client.send(
-  new PutObjectCommand({
-    Bucket: r2BucketName,
-        Key: objectKey,
-        Body: buffer,
-        ContentType: "application/pdf",
-      })
-    );
+    const command = new PutObjectCommand({
+      Bucket: r2BucketName,
+      Key: objectKey,
+      ContentType: "application/pdf",
+    });
+
+    const uploadUrl = await getSignedUrl(r2Client, command, {
+      expiresIn: 60 * 5,
+    });
 
     return NextResponse.json({
+      uploadUrl,
       objectKey,
-      fileName: file.name,
+      fileName,
       fileUrl: buildPublicFileUrl(objectKey),
     });
   } catch (error) {
-    console.error("R2 upload route failed:", error);
+    console.error("R2 sign route failed:", error);
 
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Failed to upload file",
+          error instanceof Error
+            ? error.message
+            : "Failed to generate upload URL",
       },
       { status: 500 }
     );
