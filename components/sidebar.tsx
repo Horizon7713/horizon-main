@@ -10,9 +10,9 @@ import {
   FolderKanban,
   LayoutDashboard,
   LogOut,
-  Menu,
   MessageSquare,
   Eye,
+  Menu,
 } from "lucide-react"
 
 import {
@@ -27,7 +27,6 @@ import {
   SidebarMenuItem,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { Button } from "@/components/ui/button"
 import { supabase } from "@/lib/supabase/client"
 
@@ -102,7 +101,6 @@ export function AppSidebar() {
   const pathname = usePathname()
   const router = useRouter()
 
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [userRole, setUserRole] = useState<string | null>(null)
   const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null)
 
@@ -151,9 +149,9 @@ export function AppSidebar() {
       if ("alwaysVisible" in item && item.alwaysVisible) return true
       if (!rolePermissions) return false
       if ("restrictedRoles" in item && item.restrictedRoles) {
-  if (userRole !== "contractor" && userRole !== "subcontractor") return false
-  return item.restrictedRoles.includes(userRole)
-}
+        if (userRole !== "contractor" && userRole !== "subcontractor") return false
+        return item.restrictedRoles.includes(userRole)
+      }
       return rolePermissions[item.permissionKey as keyof RolePermissions] === true
     })
   }, [rolePermissions, userRole])
@@ -165,7 +163,7 @@ export function AppSidebar() {
     router.push("/")
   }
 
-  const NavItems = ({ mobile = false }: { mobile?: boolean }) => (
+  const NavItems = () => (
     <SidebarMenu className="gap-2">
       {navigationItems.map((item) => {
         const isActive =
@@ -190,11 +188,7 @@ export function AppSidebar() {
                 data-[active=true]:shadow-[0_10px_24px_rgba(217,119,6,0.14)]
               "
             >
-              <Link
-                href={item.href}
-                onClick={mobile ? () => setMobileMenuOpen(false) : undefined}
-                className="flex w-full items-center gap-3"
-              >
+              <Link href={item.href} className="flex w-full items-center gap-3">
                 <span
                   className="
                     flex size-9 items-center justify-center rounded-lg border
@@ -230,127 +224,92 @@ export function AppSidebar() {
   return (
     <>
       <header className="app-topbar fixed inset-x-0 top-0 z-50 block md:hidden">
-        <div className="flex h-16 items-center gap-3 px-4">
-          <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-            <SheetTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
+  <div className="border-b border-[var(--border)]">
+    <div className="flex h-16 items-center justify-between gap-3 px-4">
+      <div className="min-w-0 flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-2">
+          <Image
+            src="/images/design-mode/murphybuiltlogo.png"
+            alt="Murphy Built"
+            width={24}
+            height={24}
+            className="h-6 w-auto"
+          />
+        </div>
+
+        <div className="min-w-0">
+          <p className="app-section-header">Workspace</p>
+          <p className="truncate text-sm font-semibold text-white">{pageName}</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <details className="relative z-[60]">
+          <summary
+            className="
+              flex h-10 w-10 cursor-pointer list-none items-center justify-center
+              rounded-xl border border-[var(--border)] bg-[var(--panel)]
+              text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
+            "
+          >
+            <Menu className="size-4" />
+          </summary>
+
+          <div
+            className="
+  absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-2xl
+  border border-[var(--border)] p-2
+  shadow-[0_18px_50px_rgba(0,0,0,0.45)]
+"
+  style={{
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.02), transparent 48px), #161b22",
+  }}
+          >
+            <div className="mb-2 px-2 pt-1">
+              <p className="app-section-header">Navigation</p>
+            </div>
+
+            <div className="space-y-1">
+              {navigationItems.map((item) => {
+                const isActive =
+                  pathname === item.href ||
+                  (item.href !== "/" && pathname.startsWith(item.href))
+
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={
+                      isActive
+                        ? "flex items-center rounded-xl border border-[rgba(245,158,11,0.32)] bg-[linear-gradient(180deg,rgba(245,158,11,0.10),rgba(217,119,6,0.06))] px-3 py-2 text-sm font-medium text-white"
+                        : "flex items-center rounded-xl border border-transparent bg-[rgba(255,255,255,0.02)] px-3 py-2 text-sm font-medium text-[var(--text-soft)] hover:border-[var(--border-soft)] hover:bg-[var(--panel-2)] hover:text-white"
+                    }
+                  >
+                    {item.title}
+                  </Link>
+                )
+              })}
+            </div>
+
+            <div className="mt-2 border-t border-[var(--border)] pt-2">
+              <button
+                type="button"
+                onClick={handleSignOut}
                 className="
-                  size-10 rounded-xl border border-[var(--border)] bg-[var(--panel)]
-                  text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
+                  flex w-full items-center rounded-xl px-3 py-2 text-left text-sm
+                  font-medium text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
                 "
               >
-                <Menu className="size-5" />
-              </Button>
-            </SheetTrigger>
-
-            <SheetContent
-              side="left"
-              className="w-[82vw] max-w-[280px] border-r border-[var(--border)] bg-[var(--background)] p-0 text-[var(--text)] sm:w-80"
-            >
-              <div className="flex h-full flex-col">
-                <div className="border-b border-[var(--border)] bg-[rgba(255,255,255,0.015)] px-5 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--panel)] p-2">
-                      <Image
-                        src="/images/design-mode/murphybuiltlogo.png"
-                        alt="Murphy Built"
-                        width={28}
-                        height={28}
-                        className="h-7 w-auto"
-                      />
-                    </div>
-
-                    <div className="min-w-0">
-                      <p className="app-section-header">Operations Workspace</p>
-                      <p className="mt-1 truncate text-sm font-semibold text-white">
-                        Murphy Built
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="border-b border-[var(--border)] px-5 py-4">
-                  <p className="app-section-header">Current Module</p>
-                  <p className="mt-2 text-base font-semibold text-white">{pageName}</p>
-                </div>
-
-                <nav className="flex-1 px-4 py-4">
-                  <div className="mb-3 px-2">
-                    <p className="app-section-header">Navigation</p>
-                  </div>
-                  <div className="space-y-2">
-                    {navigationItems.map((item) => {
-                      const isActive =
-                        pathname === item.href ||
-                        (item.href !== "/" && pathname.startsWith(item.href))
-                      const Icon = item.icon
-
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setMobileMenuOpen(false)}
-                          className={`
-                            flex h-12 items-center gap-3 rounded-xl border px-3 transition-all duration-150
-                            ${
-                              isActive
-                                ? "border-[rgba(245,158,11,0.32)] bg-[linear-gradient(180deg,rgba(245,158,11,0.10),rgba(217,119,6,0.06))] text-white shadow-[0_10px_24px_rgba(217,119,6,0.14)]"
-                                : "border-transparent bg-transparent text-[var(--text-soft)] hover:border-[var(--border-soft)] hover:bg-[var(--panel-2)] hover:text-white"
-                            }
-                          `}
-                        >
-                          <span
-                            className={`
-                              flex size-9 items-center justify-center rounded-lg border
-                              ${
-                                isActive
-                                  ? "border-[rgba(245,158,11,0.28)] bg-[rgba(245,158,11,0.10)]"
-                                  : "border-[var(--border)] bg-[rgba(255,255,255,0.02)]"
-                              }
-                            `}
-                          >
-                            <Icon className="size-4" />
-                          </span>
-
-                          <span className="flex-1 text-sm font-medium">{item.title}</span>
-
-                          {isActive ? (
-                            <span className="app-badge-primary !px-2 !py-1 !text-[10px]">
-                              Live
-                            </span>
-                          ) : null}
-                        </Link>
-                      )
-                    })}
-                  </div>
-                </nav>
-
-                <div className="border-t border-[var(--border)] p-4">
-                  <Button
-                    onClick={handleSignOut}
-                    variant="ghost"
-                    className="
-                      h-12 w-full justify-start gap-3 rounded-xl border border-[var(--border)]
-                      bg-[var(--panel)] text-[var(--text-soft)]
-                      hover:bg-[var(--panel-2)] hover:text-white
-                    "
-                  >
-                    <LogOut className="size-4" />
-                    <span className="font-medium">Sign out</span>
-                  </Button>
-                </div>
-              </div>
-            </SheetContent>
-          </Sheet>
-
-          <div className="min-w-0">
-            <p className="app-section-header">Workspace</p>
-            <p className="truncate text-sm font-semibold text-white">{pageName}</p>
+                Sign out
+              </button>
+            </div>
           </div>
-        </div>
-      </header>
+        </details>
+      </div>
+    </div>
+  </div>
+</header>
 
       <Sidebar
         collapsible="icon"

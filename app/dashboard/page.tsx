@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { HomeownerProjectDashboard } from "@/components/dashboard/homeowner-project-dashboard";
-import { getLatestProjectCaptureStage } from "@/app/project_visuals/actions"
+import { getLatestProjectCaptureStage } from "@/app/project_visuals/actions";
 
 function HeaderAction({
   label,
@@ -86,13 +86,13 @@ function MetricCard({
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
             {label}
           </div>
-          <div className="mt-3 text-[30px] font-semibold tracking-[-0.04em] text-zinc-50">
+          <div className="mt-3 break-words text-[30px] font-semibold tracking-[-0.04em] text-zinc-50">
             {value}
           </div>
           <div className="mt-2 text-xs text-zinc-400">{meta}</div>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 bg-black">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
           <Icon className={`h-5 w-5 ${toneIcon}`} />
         </div>
       </div>
@@ -115,7 +115,7 @@ function SurfacePanel({
 }) {
   return (
     <section className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-950">
-      <div className="flex items-start justify-between gap-4 border-b border-zinc-800 bg-zinc-950 px-5 py-4">
+      <div className="flex flex-col gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-5">
         <div className="min-w-0">
           {eyebrow ? (
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -126,10 +126,10 @@ function SurfacePanel({
           {subtitle ? <div className="mt-1 text-sm text-zinc-400">{subtitle}</div> : null}
         </div>
 
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
 
-      <div className="p-5">{children}</div>
+      <div className="p-4 sm:p-5">{children}</div>
     </section>
   );
 }
@@ -149,7 +149,7 @@ function LaunchTile({
         <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
           <Icon className="h-4 w-4 text-zinc-300" />
         </div>
-        <ChevronRight className="mt-1 h-4 w-4 text-zinc-600 group-hover:text-zinc-300" />
+        <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-zinc-600 group-hover:text-zinc-300" />
       </div>
 
       <div className="mt-4 text-sm font-medium text-zinc-100">{title}</div>
@@ -295,10 +295,10 @@ export default async function DashboardPage() {
 
   const userRole = profile?.role?.toLowerCase();
 
-    let recentMessages: any[] = [];
+  let recentMessages: any[] = [];
   let houseModelSchema: any = null;
   let siteCaptureSessions: any[] = [];
-  let latestCaptureStageResult: any = null
+  let latestCaptureStageResult: any = null;
 
   if (userRole === "homeowner" && profile?.id) {
     const { data: messages, error } = await supabase
@@ -335,10 +335,10 @@ export default async function DashboardPage() {
         houseModelSchema = houseModelRows[0].schema;
       }
 
-            try {
-        latestCaptureStageResult = await getLatestProjectCaptureStage(primaryProjectId)
+      try {
+        latestCaptureStageResult = await getLatestProjectCaptureStage(primaryProjectId);
       } catch {
-        latestCaptureStageResult = null
+        latestCaptureStageResult = null;
       }
 
       const { data: captureRows, error: captureError } = await supabase
@@ -382,16 +382,16 @@ export default async function DashboardPage() {
     }
   }
 
-    if (userRole === "homeowner" && userProjects.length > 0) {
+  if (userRole === "homeowner" && userProjects.length > 0) {
     return (
       <HomeownerProjectDashboard
-  projectId={userProjects[0].id}
-  project={userProjects[0]}
-  houseModelSchema={houseModelSchema}
-  siteCaptureSessions={siteCaptureSessions}
-  recentMessages={recentMessages}
-  latestCaptureStageResult={latestCaptureStageResult}
-/>
+        projectId={userProjects[0].id}
+        project={userProjects[0]}
+        houseModelSchema={houseModelSchema}
+        siteCaptureSessions={siteCaptureSessions}
+        recentMessages={recentMessages}
+        latestCaptureStageResult={latestCaptureStageResult}
+      />
     );
   }
 
@@ -481,17 +481,19 @@ export default async function DashboardPage() {
   ];
 
   return (
-    <div className="min-h-full bg-black text-zinc-100">
+    <div className="min-h-full bg-black pt-16 text-zinc-100 md:pt-0">
       <div className="border-b border-zinc-800 bg-zinc-950">
-        <div className="flex items-center justify-between gap-4 px-5 py-3">
-          <div>
+        <div className="flex flex-col gap-3 px-4 py-3 sm:px-5 md:flex-row md:items-center md:justify-between md:gap-4">
+          <div className="min-w-0">
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
               Enterprise Workspace
             </div>
-            <div className="mt-1 text-lg font-semibold text-zinc-100">Construction Intelligence</div>
+            <div className="mt-1 text-base font-semibold text-zinc-100 sm:text-lg">
+              Construction Intelligence
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden flex-wrap items-center gap-2 md:flex">
             <HeaderAction label="Overview" active />
             <HeaderAction label="Projects" />
             <HeaderAction label="Operations" />
@@ -500,22 +502,22 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="px-5 py-5">
+      <div className="px-4 py-4 sm:px-5 sm:py-5">
         <div className="grid gap-5 xl:grid-cols-[1.55fr_0.95fr]">
-          <div className="space-y-5">
+          <div className="space-y-5 min-w-0">
             <SurfacePanel
               eyebrow="Workspace"
               title="Construction Material Intelligence Platform"
               subtitle={`Welcome back, ${profile?.first_name || user.email}`}
               actions={
-                <div className="hidden md:flex items-center gap-2">
+                <div className="hidden items-center gap-2 md:flex">
                   <div className="rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400">
                     Role: {profile?.role || "User"}
                   </div>
                 </div>
               }
             >
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 <LaunchTile
                   title="Project Controls"
                   description="Manage jobs, ownership, and operational workspaces."
@@ -541,7 +543,7 @@ export default async function DashboardPage() {
 
             <div
               className={`grid gap-4 ${
-                userRole === "homeowner" ? "md:grid-cols-2" : "md:grid-cols-3"
+                userRole === "homeowner" ? "sm:grid-cols-2" : "sm:grid-cols-2 xl:grid-cols-3"
               }`}
             >
               {stats.map((stat) => (
@@ -566,13 +568,13 @@ export default async function DashboardPage() {
                 </div>
               }
             >
-              <div className="overflow-hidden rounded-2xl border border-zinc-800 bg-black">
+              <div className="min-w-0 overflow-hidden rounded-2xl border border-zinc-800 bg-black">
                 <ProjectsTable projects={userProjects} />
               </div>
             </SurfacePanel>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-5 min-w-0">
             <SurfacePanel
               eyebrow="Operational Status"
               title="Delivery Overview"
@@ -668,12 +670,12 @@ export default async function DashboardPage() {
                           className="rounded-xl border border-zinc-800 bg-black p-4"
                         >
                           <div className="flex gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
                               <Icon className={`h-4 w-4 ${iconColor}`} />
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-2">
                                 <p className="truncate text-sm font-medium text-zinc-100">
                                   {senderName}
                                 </p>
@@ -694,7 +696,7 @@ export default async function DashboardPage() {
                                   <img
                                     src={message.file_url || "/placeholder.svg"}
                                     alt="Message attachment"
-                                    className="h-12 w-12 flex-shrink-0 rounded-lg border border-zinc-800 object-cover"
+                                    className="h-12 w-12 shrink-0 rounded-lg border border-zinc-800 object-cover"
                                   />
                                 ) : null}
                               </div>
@@ -719,7 +721,7 @@ export default async function DashboardPage() {
                         className="rounded-xl border border-zinc-800 bg-black p-4"
                       >
                         <div className="flex gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
+                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
                             <Icon className={`h-4 w-4 ${activity.color}`} />
                           </div>
 

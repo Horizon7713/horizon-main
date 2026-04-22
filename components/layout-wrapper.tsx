@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { usePathname } from "next/navigation"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
+import { SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/sidebar"
 
 const AUTH_ROUTES = new Set(["/", "/signup"])
@@ -33,15 +33,15 @@ export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <SidebarProvider>
       <div className="min-h-screen w-full bg-[var(--background)] text-[var(--text)]">
-        <div className="flex min-h-screen w-full">
+        <div className="min-h-screen w-full md:flex">
           <AppSidebar />
-          <SidebarInset className="bg-transparent">
+          <main className="min-w-0 flex-1">
             <div className="min-h-screen bg-transparent">
               <div className="app-page">
                 <div className="app-page-inner">{children}</div>
               </div>
             </div>
-          </SidebarInset>
+          </main>
         </div>
       </div>
     </SidebarProvider>
