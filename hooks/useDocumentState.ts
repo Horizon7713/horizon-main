@@ -203,7 +203,7 @@ export function useDocumentState(documentId: string | null): UseDocumentStateRet
           table: 'document_events',
           filter: `document_id=eq.${documentId}`,
         },
-        (payload) => {
+        (payload: { new: DocumentEvent }) => {
           const event = payload.new as DocumentEvent
 
           // Detect seq gap (events arrived out of order or we missed one)

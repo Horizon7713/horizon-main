@@ -103,7 +103,7 @@ export function MessagesClient({
           schema: "public",
           table: "messages",
         },
-        (payload) => {
+        (payload: { new: Message }) => {
           console.log("[v0] Realtime: New message received", payload)
 
           const newMessage = payload.new as Message
@@ -138,9 +138,9 @@ export function MessagesClient({
           })
         },
       )
-      .subscribe((status) => {
-        console.log("[v0] Realtime subscription status:", status)
-      })
+      .subscribe((status: string) => {
+  console.log("[v0] Realtime subscription status:", status)
+})
 
     return () => {
       console.log("[v0] Cleaning up realtime subscription")
