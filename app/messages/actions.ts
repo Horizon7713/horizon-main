@@ -1,6 +1,6 @@
 "use server"
 
-import { openai } from "@ai-sdk/openai"
+import { createOpenAI } from "@ai-sdk/openai"
 import { generateObject } from "ai"
 import type { ModelMessage } from "ai"
 import { z } from "zod"
@@ -27,11 +27,22 @@ const receiptResultSchema = z.object({
     .describe("Image quality assessment"),
 })
 
+function getOpenAIProvider() {
+  const apiKey = process.env.OPENAI_API_KEY
+
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is missing")
+  }
+
+  return createOpenAI({ apiKey })
+}
+
 export async function analyzeReceipt(imageBase64: string, mimeType: string) {
   try {
-    console.log("[v0] Starting receipt analysis using Vercel AI Gateway...")
+    console.log("[v0] Starting receipt analysis using OpenAI provider...")
     const startTime = Date.now()
 
+    const openai = getOpenAIProvider()
     const imageDataUrl = `data:${mimeType};base64,${imageBase64}`
 
     const messages: ModelMessage[] = [
@@ -60,7 +71,7 @@ Always return valid numbers for total_price and prices. If a field cannot be det
     ]
 
     const { object } = await generateObject({
-      model: "openai/gpt-5-mini",
+      model: openai("gpt-5-mini"),
       schema: receiptResultSchema,
       messages,
     })
@@ -84,6 +95,7 @@ Always return valid numbers for total_price and prices. If a field cannot be det
     }
   } catch (error) {
     console.error("[v0] Error analyzing receipt:", error)
+
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to analyze receipt",
@@ -93,8 +105,10 @@ Always return valid numbers for total_price and prices. If a field cannot be det
 
 export async function analyzeReceiptWithOCR(ocrText: string) {
   try {
-    console.log("[v0] Analyzing receipt with OCR-extracted text using Vercel AI Gateway...")
+    console.log("[v0] Analyzing receipt with OCR-extracted text using OpenAI provider...")
     const startTime = Date.now()
+
+    const openai = getOpenAIProvider()
 
     const messages: ModelMessage[] = [
       {
@@ -106,9 +120,9 @@ ${ocrText}`,
     ]
 
     const { object } = await generateObject({
-  model: openai("gpt-5-mini"),
-  schema: receiptResultSchema,
-  system: `You are an expert at extracting structured data from receipt text. Parse OCR-extracted receipt text and extract the total price, vendor name, and all items purchased.
+      model: openai("gpt-5-mini"),
+      schema: receiptResultSchema,
+      system: `You are an expert at extracting structured data from receipt text. Parse OCR-extracted receipt text and extract the total price, vendor name, and all items purchased.
 
 CRITICAL EXTRACTION RULES:
 1. Total Price: Extract ONLY the final "Total" line - never use subtotals, taxes, or discounts. Must be a valid number.
@@ -118,8 +132,8 @@ CRITICAL EXTRACTION RULES:
 5. Image Quality: Assess based on OCR text clarity - good if clear and complete, poor if some text is garbled, unreadable if mostly illegible.
 
 Always return valid numbers for total_price and prices. If a field cannot be determined, use sensible defaults.`,
-  messages,
-})
+      messages,
+    })
 
     const elapsedTime = Date.now() - startTime
     console.log("[v0] Receipt analysis result:", object)
@@ -139,14 +153,14 @@ Always return valid numbers for total_price and prices. If a field cannot be det
       },
     }
   } catch (error) {
-  console.error("[v0] Error analyzing receipt with OCR:", error)
+    console.error("[v0] Error analyzing receipt with OCR:", error)
 
-  return {
-    success: false,
-    error:
-      error instanceof Error
-        ? `${error.name}: ${error.message}`
-        : `Unknown error: ${String(error)}`,
+    return {
+      success: false,
+      error:
+        error instanceof Error
+          ? `${error.name}: ${error.message}`
+          : `Unknown error: ${String(error)}`,
+    }
   }
-}
 }
