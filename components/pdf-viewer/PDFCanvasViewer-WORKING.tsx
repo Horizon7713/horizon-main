@@ -2,11 +2,10 @@
 
 import React, { useRef, useEffect, useState } from 'react'
 import * as pdfjsLib from 'pdfjs-dist'
-import { Markup, MarkupType } from '@/lib/pdf-viewer-types'
+import type { PdfMarkup } from '@/lib/pdf-viewer-types'
 import { drawMarkup } from '@/lib/pdf-markup-utils'
 import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 // CRITICAL: Configure PDF.js worker BEFORE any PDF loading
 // Use the worker from pdfjs-dist/build which is bundled with the package
@@ -63,9 +62,9 @@ if (typeof window !== 'undefined' && !pdfjsLib.GlobalWorkerOptions.workerSrc) {
 
 interface PDFCanvasViewerProps {
   pdfUrl: string
-  markups: Markup[]
-  onMarkupsChange: (markups: Markup[]) => void
-  activeTool: MarkupType | null
+  markups: PdfMarkup[]
+  onMarkupsChange: (markups: PdfMarkup[]) => void
+  activeTool: PdfMarkup['type'] | null
   selectedMarkupId: string | null
   onMarkupSelect: (id: string | null) => void
   zoom: number
