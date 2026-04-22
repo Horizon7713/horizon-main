@@ -67,11 +67,11 @@ export function ProjectCopilotPanel({ projectId }: ProjectCopilotPanelProps) {
       const result = await getProjectCopilotRecap(projectId)
 
       if (!result.success || !result.data) {
-        setMessage(result.error || "Failed to load project recap.")
-        setRecap(null)
-      } else {
-        setRecap(result.data as ProjectCopilotRecap)
-      }
+  setMessage("Failed to load project recap.")
+  setRecap(null)
+} else {
+  setRecap(result.data as ProjectCopilotRecap)
+}
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Failed to load project recap."
       setMessage(msg)
