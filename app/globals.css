@@ -745,7 +745,6 @@
   .app-button,
   .app-button-secondary,
   .app-button-ghost {
-    width: 100%;
     min-height: 2.875rem;
   }
 
@@ -777,5 +776,42 @@
 
   .app-sidebar * {
     min-width: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .quick-actions-grid {
+    gap: 0.5rem !important;
+  }
+
+  .quick-action-card {
+    padding: 0.625rem !important;
+    border-radius: 0.75rem !important;
+  }
+
+  .quick-action-card .icon-wrap {
+    width: 2rem !important;
+    height: 2rem !important;
+  }
+
+  .quick-action-card .title {
+    font-size: 0.75rem !important;
+    line-height: 1rem !important;
+  }
+
+  .quick-action-card .description {
+    display: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  * {
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  body,
+  html {
+    overflow-x: hidden;
   }
 }

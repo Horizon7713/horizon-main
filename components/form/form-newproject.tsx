@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -62,17 +61,17 @@ function SectionHeader({
   subtitle: string
 }) {
   return (
-    <div className="mb-4 flex items-start gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950">
+    <div className="mb-3 flex items-start gap-3 sm:mb-4">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 sm:h-10 sm:w-10">
         <Icon className="h-4 w-4 text-zinc-300" />
       </div>
 
-      <div>
-        <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+      <div className="min-w-0">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
           {eyebrow}
         </div>
-        <div className="mt-1 text-sm font-semibold text-zinc-100">{title}</div>
-        <div className="mt-1 text-xs text-zinc-500">{subtitle}</div>
+        <div className="mt-1 text-sm font-semibold text-zinc-100 sm:text-base">{title}</div>
+        <div className="mt-1 text-xs leading-5 text-zinc-500">{subtitle}</div>
       </div>
     </div>
   )
@@ -186,28 +185,30 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
   }
 
   const inputClassName =
-    "h-11 rounded-xl border-zinc-800 bg-black text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-zinc-700"
+    "h-10 sm:h-11 rounded-xl border-zinc-800 bg-black text-zinc-100 placeholder:text-zinc-500 focus-visible:ring-1 focus-visible:ring-zinc-700"
 
-  const triggerClassName =
-    "h-11 w-full rounded-xl border-zinc-800 bg-black text-zinc-100"
+  const triggerClassName = "h-10 sm:h-11 w-full rounded-xl border-zinc-800 bg-black text-zinc-100"
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form
+  onSubmit={handleSubmit}
+  className="max-h-[75vh] overflow-y-auto space-y-4 pr-1 pb-6 sm:max-h-[80vh] sm:space-y-5"
+>
       {error ? (
         <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
           {error}
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-zinc-800 bg-black p-4">
+      <div className="rounded-2xl border border-zinc-800 bg-black p-3 sm:p-4">
         <SectionHeader
           icon={Building2}
           eyebrow="Project Core"
           title="Primary Project Details"
-          subtitle="Define the project type, schedule window, owner company, and budget baseline."
+          subtitle="Set the project basics, schedule, company, and budget."
         />
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label htmlFor="projectType" className="text-zinc-300">
               Project Type
@@ -233,10 +234,7 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
             <Label htmlFor="status" className="text-zinc-300">
               Status
             </Label>
-            <Select
-              value={formData.status}
-              onValueChange={(value) => setFormData({ ...formData, status: value })}
-            >
+            <Select value={formData.status} onValueChange={(value) => setFormData({ ...formData, status: value })}>
               <SelectTrigger id="status" className={triggerClassName}>
                 <SelectValue placeholder="Select status" />
               </SelectTrigger>
@@ -332,15 +330,15 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-black p-4">
+      <div className="rounded-2xl border border-zinc-800 bg-black p-3 sm:p-4">
         <SectionHeader
           icon={Ruler}
           eyebrow="Scheduling Inputs"
           title="Project Quantity Inputs"
-          subtitle="Use construction quantities to support more accurate schedule and scope setup."
+          subtitle="Use quantity inputs for better schedule and scope planning."
         />
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="squareFeet" className="text-zinc-300">
               Square Feet
@@ -423,12 +421,12 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
         </div>
       </div>
 
-      <div className="rounded-2xl border border-zinc-800 bg-black p-4">
+      <div className="rounded-2xl border border-zinc-800 bg-black p-3 sm:p-4">
         <SectionHeader
           icon={Users}
           eyebrow="Assignments"
           title="Assign Project Users"
-          subtitle="Select users to add to the project workspace and activate collaboration access."
+          subtitle="Choose who should have access to this project."
         />
 
         <div className="space-y-2">
@@ -440,7 +438,7 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
                 variant="outline"
                 role="combobox"
                 aria-expanded={open}
-                className="h-auto min-h-11 w-full justify-between rounded-xl border-zinc-800 bg-black text-zinc-100 hover:border-zinc-700 hover:bg-zinc-950"
+                className="h-auto min-h-10 w-full justify-between rounded-xl border-zinc-800 bg-black px-3 py-2 text-left text-zinc-100 hover:border-zinc-700 hover:bg-zinc-950"
                 type="button"
               >
                 <span className="truncate">
@@ -470,7 +468,7 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
                       >
                         <div
                           className={cn(
-                            "mr-2 flex h-4 w-4 items-center justify-center rounded-sm border border-zinc-700",
+                            "mr-2 flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-zinc-700",
                             selectedUserIds.includes(user.id)
                               ? "bg-zinc-100 text-zinc-950"
                               : "opacity-50 [&_svg]:invisible",
@@ -479,11 +477,11 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
                           <CheckIcon className="h-4 w-4" />
                         </div>
 
-                        <div className="flex flex-col">
-                          <span className="text-sm">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm">
                             {user.first_name} {user.last_name}
-                          </span>
-                          <span className="text-xs text-zinc-500">{user.email}</span>
+                          </div>
+                          <div className="truncate text-xs text-zinc-500">{user.email}</div>
                         </div>
                       </CommandItem>
                     ))}
@@ -498,15 +496,15 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
               {selectedUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="inline-flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200"
+                  className="inline-flex max-w-full items-center gap-2 rounded-full border border-zinc-700 bg-zinc-950 px-3 py-1.5 text-sm text-zinc-200"
                 >
-                  <span>
+                  <span className="truncate">
                     {user.first_name} {user.last_name}
                   </span>
                   <button
                     type="button"
                     onClick={() => removeUser(user.id)}
-                    className="rounded-sm p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
+                    className="shrink-0 rounded-sm p-0.5 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100"
                   >
                     <XIcon className="h-3 w-3" />
                   </button>
@@ -517,14 +515,14 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
         </div>
       </div>
 
-      <div className="flex justify-end gap-2 pt-2">
+      <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
         {onCancel ? (
           <Button
             type="button"
             variant="outline"
             onClick={onCancel}
             disabled={loading}
-            className="border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100"
+            className="w-full border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100 sm:w-auto"
           >
             Cancel
           </Button>
@@ -533,7 +531,7 @@ export function FormNewProject({ onSuccess, onCancel, createProject }: FormNewPr
         <Button
           type="submit"
           disabled={loading}
-          className="border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800"
+          className="w-full border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 sm:w-auto"
         >
           {loading ? "Creating..." : "Create Project"}
         </Button>

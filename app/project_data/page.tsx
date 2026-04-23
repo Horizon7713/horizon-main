@@ -233,7 +233,7 @@ function SurfacePanel({
 }) {
   return (
     <section className="overflow-hidden rounded-[20px] border border-zinc-800 bg-zinc-950">
-      <div className="flex items-start justify-between gap-4 border-b border-zinc-800 bg-zinc-950 px-5 py-4">
+      <div className="flex flex-col gap-3 border-b border-zinc-800 bg-zinc-950 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4 sm:px-5">
         <div className="min-w-0">
           {eyebrow ? (
             <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -244,7 +244,7 @@ function SurfacePanel({
           {subtitle ? <div className="mt-1 text-sm text-zinc-400">{subtitle}</div> : null}
         </div>
 
-        {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="w-full sm:w-auto">{actions}</div> : null}
       </div>
 
       <div className="p-5">{children}</div>
@@ -310,46 +310,49 @@ export default async function ProjectsPage() {
   return (
     <div className="min-h-full bg-black text-zinc-100">
       <div className="border-b border-zinc-800 bg-zinc-950">
-        <div className="flex items-center justify-between gap-4 px-5 py-3">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
-              Enterprise Workspace
-            </div>
-            <div className="mt-1 text-lg font-semibold text-zinc-100">
-              Project Management
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <HeaderAction label="Overview" active />
-            <HeaderAction label="Projects" />
-            <HeaderAction label="Operations" />
-            <HeaderAction label="Assignments" />
-          </div>
-        </div>
+  <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+    <div>
+      <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
+        Enterprise Workspace
       </div>
+      <div className="mt-1 text-lg font-semibold text-zinc-100">
+        Project Management
+      </div>
+    </div>
+
+    <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:justify-end">
+      <HeaderAction label="Overview" active />
+      <HeaderAction label="Projects" />
+      <HeaderAction label="Operations" />
+      <HeaderAction label="Assignments" />
+    </div>
+  </div>
+</div>
 
       <div className="px-5 py-5">
         <div className="space-y-5">
           <SurfacePanel
-            eyebrow="Projects Workspace"
-            title="Construction Project Controls"
-            subtitle="Manage active jobs, scheduling windows, budgets, and team assignments."
-            actions={
-              <div className="flex items-center gap-2">
-                <ProjectsClient createProject={createProject} />
-                <form action="/api/auth/signout" method="POST">
-                  <Button
-                    variant="outline"
-                    type="submit"
-                    className="border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100"
-                  >
-                    Sign out
-                  </Button>
-                </form>
-              </div>
-            }
-          >
+  eyebrow="Projects Workspace"
+  title="Construction Project Controls"
+  subtitle="Manage active jobs, scheduling windows, budgets, and team assignments."
+  actions={
+    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+      <div className="w-full sm:w-auto">
+        <ProjectsClient createProject={createProject} />
+      </div>
+
+      <form action="/api/auth/signout" method="POST" className="w-full sm:w-auto">
+        <Button
+          variant="outline"
+          type="submit"
+          className="w-full border-zinc-800 bg-zinc-950 text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100 sm:w-auto"
+        >
+          Sign out
+        </Button>
+      </form>
+    </div>
+  }
+>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <MetricCard
                 label="Total Projects"

@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -256,13 +255,11 @@ export function ProjectManagementClient() {
       return
     }
 
-    // Reset form
     setNewBid({ title: "", description: "", amount: "" })
     setPdfFile(null)
     setPdfUrl(null)
     setAiAnalysis("")
 
-    // Refresh bids
     fetchBids(selectedProject.id)
     alert("Bid submitted successfully!")
   }
@@ -329,94 +326,105 @@ export function ProjectManagementClient() {
 
   if (selectedProject) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={handleBackToList}>
+      <div className="space-y-4 sm:space-y-6">
+        <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+          <Button variant="ghost" size="icon" onClick={handleBackToList} className="mt-0.5 shrink-0 sm:mt-0">
             <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-semibold">{selectedProject.name}</h2>
-              <Badge variant={getStatusVariant(selectedProject.status)}>{selectedProject.status}</Badge>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+              <h2 className="min-w-0 text-xl font-semibold leading-tight sm:text-2xl">{selectedProject.name}</h2>
+              <Badge variant={getStatusVariant(selectedProject.status)} className="w-fit">
+                {selectedProject.status}
+              </Badge>
             </div>
+
             {selectedProject.company && (
-              <p className="text-muted-foreground flex items-center gap-1 mt-1">
-                <Building2 className="h-4 w-4" />
-                {selectedProject.company}
+              <p className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
+                <Building2 className="h-4 w-4 shrink-0" />
+                <span className="truncate">{selectedProject.company}</span>
               </p>
             )}
           </div>
         </div>
 
         <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="bids">Bids</TabsTrigger>
-            <TabsTrigger value="media">Media</TabsTrigger>
-            <TabsTrigger value="people">People</TabsTrigger>
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 sm:grid-cols-4">
+            <TabsTrigger value="overview" className="min-h-10 rounded-lg border">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="bids" className="min-h-10 rounded-lg border">
+              Bids
+            </TabsTrigger>
+            <TabsTrigger value="media" className="min-h-10 rounded-lg border">
+              Media
+            </TabsTrigger>
+            <TabsTrigger value="people" className="min-h-10 rounded-lg border">
+              People
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-4">
                 <CardTitle>Project Overview</CardTitle>
               </CardHeader>
-              
-             <CardContent className="space-y-6">
-  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-    <div>
-      <p className="text-sm text-muted-foreground">Start Date</p>
-      <p className="font-medium">{formatDate(selectedProject.start_date)}</p>
-    </div>
-    <div>
-      <p className="text-sm text-muted-foreground">End Date</p>
-      <p className="font-medium">{formatDate(selectedProject.end_date)}</p>
-    </div>
-    <div>
-      <p className="text-sm text-muted-foreground">Budget</p>
-      <p className="font-medium">
-        {selectedProject.budget !== null ? `$${selectedProject.budget.toLocaleString()}` : "N/A"}
-      </p>
-    </div>
-    <div>
-      <p className="text-sm text-muted-foreground">Team Size</p>
-      <p className="font-medium">{selectedProject.users?.length || 0} members</p>
-    </div>
-  </div>
 
-  <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
-    <div className="mb-3">
-      <p className="text-sm font-medium text-slate-800">Scheduling Inputs</p>
-      <p className="text-xs text-slate-500">
-        These quantities are used to calculate production-based task durations.
-      </p>
-    </div>
+              <CardContent className="space-y-5">
+                <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground sm:text-sm">Start Date</p>
+                    <p className="mt-1 text-sm font-medium sm:text-base">{formatDate(selectedProject.start_date)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground sm:text-sm">End Date</p>
+                    <p className="mt-1 text-sm font-medium sm:text-base">{formatDate(selectedProject.end_date)}</p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground sm:text-sm">Budget</p>
+                    <p className="mt-1 text-sm font-medium sm:text-base">
+                      {selectedProject.budget !== null ? `$${selectedProject.budget.toLocaleString()}` : "N/A"}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border p-3">
+                    <p className="text-xs text-muted-foreground sm:text-sm">Team Size</p>
+                    <p className="mt-1 text-sm font-medium sm:text-base">{selectedProject.users?.length || 0} members</p>
+                  </div>
+                </div>
 
-    <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
-      <div>
-        <p className="text-sm text-muted-foreground">Square Feet</p>
-        <p className="font-medium">{selectedProject.square_feet ?? "N/A"}</p>
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">Bathrooms</p>
-        <p className="font-medium">{selectedProject.bathroom_count ?? "N/A"}</p>
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">Windows</p>
-        <p className="font-medium">{selectedProject.window_count ?? "N/A"}</p>
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">Doors</p>
-        <p className="font-medium">{selectedProject.door_count ?? "N/A"}</p>
-      </div>
-      <div>
-        <p className="text-sm text-muted-foreground">Cabinets</p>
-        <p className="font-medium">{selectedProject.cabinet_count ?? "N/A"}</p>
-      </div>
-    </div>
-  </div>
-</CardContent>
- 
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                  <div className="mb-3">
+                    <p className="text-sm font-medium text-slate-800">Scheduling Inputs</p>
+                    <p className="text-xs text-slate-500">
+                      These quantities are used to calculate production-based task durations.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-5">
+                    <div className="rounded-lg bg-white/70 p-3">
+                      <p className="text-xs text-muted-foreground sm:text-sm">Square Feet</p>
+                      <p className="mt-1 font-medium">{selectedProject.square_feet ?? "N/A"}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/70 p-3">
+                      <p className="text-xs text-muted-foreground sm:text-sm">Bathrooms</p>
+                      <p className="mt-1 font-medium">{selectedProject.bathroom_count ?? "N/A"}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/70 p-3">
+                      <p className="text-xs text-muted-foreground sm:text-sm">Windows</p>
+                      <p className="mt-1 font-medium">{selectedProject.window_count ?? "N/A"}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/70 p-3">
+                      <p className="text-xs text-muted-foreground sm:text-sm">Doors</p>
+                      <p className="mt-1 font-medium">{selectedProject.door_count ?? "N/A"}</p>
+                    </div>
+                    <div className="rounded-lg bg-white/70 p-3">
+                      <p className="text-xs text-muted-foreground sm:text-sm">Cabinets</p>
+                      <p className="mt-1 font-medium">{selectedProject.cabinet_count ?? "N/A"}</p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
           </TabsContent>
 
@@ -426,6 +434,7 @@ export function ProjectManagementClient() {
                 <CardTitle>Submit New Bid</CardTitle>
                 <CardDescription>Upload a PDF and use AI to analyze the bid</CardDescription>
               </CardHeader>
+
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="bid-title">Bid Title *</Label>
@@ -461,7 +470,7 @@ export function ProjectManagementClient() {
 
                 <div className="space-y-2">
                   <Label htmlFor="pdf-upload">Upload PDF</Label>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <Input
                       id="pdf-upload"
                       type="file"
@@ -472,34 +481,36 @@ export function ProjectManagementClient() {
                     />
                     {uploadingPdf && <Loader2 className="h-4 w-4 animate-spin" />}
                   </div>
+
                   {pdfFile && (
-                    <p className="text-sm text-muted-foreground flex items-center gap-1">
-                      <FileText className="h-4 w-4" />
-                      {pdfFile.name}
+                    <p className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{pdfFile.name}</span>
                     </p>
                   )}
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Button
                     onClick={handleAnalyzeWithGrok}
                     disabled={!pdfUrl || analyzingBid}
                     variant="outline"
-                    className="flex-1 bg-transparent"
+                    className="w-full sm:flex-1"
                   >
                     {analyzingBid ? (
                       <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         Analyzing...
                       </>
                     ) : (
                       <>
-                        <Sparkles className="h-4 w-4 mr-2" />
+                        <Sparkles className="mr-2 h-4 w-4" />
                         Analyze with Grok AI
                       </>
                     )}
                   </Button>
-                  <Button onClick={handleSubmitBid} disabled={!newBid.title} className="flex-1">
+
+                  <Button onClick={handleSubmitBid} disabled={!newBid.title} className="w-full sm:flex-1">
                     Submit Bid
                   </Button>
                 </div>
@@ -507,8 +518,8 @@ export function ProjectManagementClient() {
                 {aiAnalysis && (
                   <div className="space-y-2">
                     <Label>AI Analysis</Label>
-                    <div className="p-4 bg-muted rounded-lg">
-                      <p className="text-sm whitespace-pre-wrap">{aiAnalysis}</p>
+                    <div className="rounded-lg bg-muted p-4">
+                      <p className="whitespace-pre-wrap text-sm">{aiAnalysis}</p>
                     </div>
                   </div>
                 )}
@@ -520,31 +531,34 @@ export function ProjectManagementClient() {
                 <CardTitle>Submitted Bids</CardTitle>
                 <CardDescription>View all bids for this project</CardDescription>
               </CardHeader>
+
               <CardContent>
                 {bidsLoading ? (
-                  <p className="text-muted-foreground text-center py-8">Loading bids...</p>
+                  <p className="py-8 text-center text-muted-foreground">Loading bids...</p>
                 ) : bids.length === 0 ? (
-                  <p className="text-muted-foreground text-center py-8">No bids submitted yet</p>
+                  <p className="py-8 text-center text-muted-foreground">No bids submitted yet</p>
                 ) : (
                   <div className="space-y-4">
                     {bids.map((bid) => (
                       <Card key={bid.id}>
-                        <CardHeader>
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <CardTitle className="text-lg">{bid.title}</CardTitle>
+                        <CardHeader className="pb-3">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0 flex-1">
+                              <CardTitle className="text-base sm:text-lg">{bid.title}</CardTitle>
                               {bid.description && <CardDescription className="mt-1">{bid.description}</CardDescription>}
                             </div>
+
                             <Button
                               variant="ghost"
                               size="icon"
                               onClick={() => handleDeleteBid(bid.id)}
-                              className="text-destructive"
+                              className="self-end text-destructive sm:self-start"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </CardHeader>
+
                         <CardContent className="space-y-3">
                           {bid.amount && (
                             <div className="flex items-center gap-2">
@@ -552,28 +566,31 @@ export function ProjectManagementClient() {
                               <span className="font-semibold">${bid.amount.toLocaleString()}</span>
                             </div>
                           )}
+
                           {bid.pdf_url && (
-                            <div className="flex items-center gap-2">
-                              <FileText className="h-4 w-4 text-muted-foreground" />
+                            <div className="flex items-start gap-2">
+                              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                               <a
                                 href={bid.pdf_url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-sm text-primary hover:underline"
+                                className="break-all text-sm text-primary hover:underline"
                               >
                                 {bid.pdf_filename || "View PDF"}
                               </a>
                             </div>
                           )}
+
                           {bid.ai_analysis && (
                             <div className="space-y-2">
-                              <p className="text-sm font-medium flex items-center gap-1">
+                              <p className="flex items-center gap-1 text-sm font-medium">
                                 <Sparkles className="h-4 w-4" />
                                 AI Analysis
                               </p>
-                              <div className="p-3 bg-muted rounded text-sm whitespace-pre-wrap">{bid.ai_analysis}</div>
+                              <div className="rounded bg-muted p-3 text-sm whitespace-pre-wrap">{bid.ai_analysis}</div>
                             </div>
                           )}
+
                           <p className="text-xs text-muted-foreground">Submitted on {formatDate(bid.created_at)}</p>
                         </CardContent>
                       </Card>
@@ -591,7 +608,7 @@ export function ProjectManagementClient() {
                 <CardDescription>Project photos and documents</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground text-center py-8">No media available</p>
+                <p className="py-8 text-center text-muted-foreground">No media available</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -603,7 +620,7 @@ export function ProjectManagementClient() {
                 <CardDescription>Team members and stakeholders</CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground text-center py-8">No team members listed</p>
+                <p className="py-8 text-center text-muted-foreground">No team members listed</p>
               </CardContent>
             </Card>
           </TabsContent>
@@ -613,15 +630,15 @@ export function ProjectManagementClient() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold">Project Management</h2>
-        <p className="text-muted-foreground">View and manage all projects</p>
+        <h2 className="text-xl font-semibold sm:text-2xl">Project Management</h2>
+        <p className="text-sm text-muted-foreground sm:text-base">View and manage all projects</p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search projects by name or company..."
             value={searchQuery}
@@ -629,6 +646,7 @@ export function ProjectManagementClient() {
             className="pl-9"
           />
         </div>
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filter by status" />
@@ -644,68 +662,87 @@ export function ProjectManagementClient() {
       </div>
 
       {loading ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="py-12 text-center text-muted-foreground">
           <p>Loading projects...</p>
         </div>
       ) : filteredProjects.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="py-12 text-center text-muted-foreground">
           <p>No projects found</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-2 overflow-x-hidden md:gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredProjects.map((project) => {
             const daysRemaining = calculateDaysRemaining(project.end_date)
-            return (
-              <div key={project.id} onClick={() => handleProjectClick(project)}>
-                <Card className="hover:shadow-lg transition-shadow cursor-pointer h-full">
-                  <CardHeader>
-                    <div className="flex items-start justify-between gap-2">
-                      <CardTitle className="text-lg line-clamp-1">{project.name}</CardTitle>
-                      <Badge variant={getStatusVariant(project.status)}>{project.status}</Badge>
-                    </div>
-                    {project.company && (
-                      <CardDescription className="flex items-center gap-1">
-                        <Building2 className="h-3 w-3" />
-                        {project.company}
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      <span>
-                        {formatDate(project.start_date)} - {formatDate(project.end_date)}
-                      </span>
-                    </div>
 
-                    {daysRemaining !== null && (
-                      <div className="text-sm">
-                        {daysRemaining > 0 ? (
-                          <span className="text-muted-foreground">{daysRemaining} days remaining</span>
-                        ) : daysRemaining === 0 ? (
-                          <span className="text-orange-600 font-medium">Due today</span>
-                        ) : (
-                          <span className="text-red-600 font-medium">{Math.abs(daysRemaining)} days overdue</span>
-                        )}
-                      </div>
-                    )}
+          return (
+  <div key={project.id} onClick={() => handleProjectClick(project)}>
+    <div className="block sm:hidden">
+      <button
+        type="button"
+        className="w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-3 text-left text-sm font-medium text-zinc-100"
+      >
+        <span className="block truncate">{project.name}</span>
+      </button>
+    </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t">
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Users className="h-4 w-4" />
-                        <span>{project.users?.length || 0} members</span>
-                      </div>
-                      {project.budget !== null && (
-                        <div className="flex items-center gap-1 text-sm font-medium">
-                          <DollarSign className="h-4 w-4" />
-                          <span>${project.budget.toLocaleString()}</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+    <div className="hidden sm:block">
+      <Card className="cursor-pointer transition-shadow hover:shadow-lg">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-start justify-between gap-2">
+              <CardTitle className="line-clamp-2 text-base sm:text-lg">{project.name}</CardTitle>
+              <Badge variant={getStatusVariant(project.status)} className="shrink-0">
+                {project.status}
+              </Badge>
+            </div>
+
+            {project.company && (
+              <CardDescription className="flex items-center gap-1">
+                <Building2 className="h-3 w-3 shrink-0" />
+                <span className="truncate">{project.company}</span>
+              </CardDescription>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          <div className="flex items-start gap-2 text-sm text-muted-foreground">
+            <Calendar className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="leading-snug">
+              {formatDate(project.start_date)} - {formatDate(project.end_date)}
+            </span>
+          </div>
+
+          {daysRemaining !== null && (
+            <div className="text-sm">
+              {daysRemaining > 0 ? (
+                <span className="text-muted-foreground">{daysRemaining} days remaining</span>
+              ) : daysRemaining === 0 ? (
+                <span className="font-medium text-orange-600">Due today</span>
+              ) : (
+                <span className="font-medium text-red-600">{Math.abs(daysRemaining)} days overdue</span>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2 border-t pt-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <Users className="h-4 w-4" />
+              <span>{project.users?.length || 0} members</span>
+            </div>
+
+            {project.budget !== null && (
+              <div className="flex items-center gap-1 text-sm font-medium">
+                <DollarSign className="h-4 w-4" />
+                <span>${project.budget.toLocaleString()}</span>
               </div>
-            )
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  </div>
+) 
           })}
         </div>
       )}
