@@ -13,6 +13,7 @@ import {
   MessageSquare,
   Eye,
   Menu,
+  X,
 } from "lucide-react"
 
 import {
@@ -103,6 +104,7 @@ export function AppSidebar() {
 
   const [userRole, setUserRole] = useState<string | null>(null)
   const [rolePermissions, setRolePermissions] = useState<RolePermissions | null>(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     const fetchUserRole = async () => {
@@ -243,72 +245,86 @@ export function AppSidebar() {
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <details className="relative z-[60]">
-          <summary
-            className="
-              flex h-10 w-10 cursor-pointer list-none items-center justify-center
-              rounded-xl border border-[var(--border)] bg-[var(--panel)]
-              text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
-            "
-          >
-            <Menu className="size-4" />
-          </summary>
-
-          <div
-            className="
-  absolute right-0 top-12 z-50 w-56 overflow-hidden rounded-2xl
-  border border-[var(--border)] p-2
-  shadow-[0_18px_50px_rgba(0,0,0,0.45)]
-"
-  style={{
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.02), transparent 48px), #161b22",
-  }}
-          >
-            <div className="mb-2 px-2 pt-1">
-              <p className="app-section-header">Navigation</p>
-            </div>
-
-            <div className="space-y-1">
-              {navigationItems.map((item) => {
-                const isActive =
-                  pathname === item.href ||
-                  (item.href !== "/" && pathname.startsWith(item.href))
-
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={
-                      isActive
-                        ? "flex items-center rounded-xl border border-[rgba(245,158,11,0.32)] bg-[linear-gradient(180deg,rgba(245,158,11,0.10),rgba(217,119,6,0.06))] px-3 py-2 text-sm font-medium text-white"
-                        : "flex items-center rounded-xl border border-transparent bg-[rgba(255,255,255,0.02)] px-3 py-2 text-sm font-medium text-[var(--text-soft)] hover:border-[var(--border-soft)] hover:bg-[var(--panel-2)] hover:text-white"
-                    }
-                  >
-                    {item.title}
-                  </Link>
-                )
-              })}
-            </div>
-
-            <div className="mt-2 border-t border-[var(--border)] pt-2">
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="
-                  flex w-full items-center rounded-xl px-3 py-2 text-left text-sm
-                  font-medium text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
-                "
-              >
-                Sign out
-              </button>
-            </div>
-          </div>
-        </details>
-      </div>
+      <button
+        type="button"
+        onClick={() => setMobileNavOpen((prev) => !prev)}
+        aria-label={mobileNavOpen ? "Close navigation menu" : "Open navigation menu"}
+        className="
+          flex h-10 w-10 shrink-0 items-center justify-center
+          rounded-xl border border-[var(--border)] bg-[var(--panel)]
+          text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
+        "
+      >
+        {mobileNavOpen ? <X className="size-4" /> : <Menu className="size-4" />}
+      </button>
     </div>
   </div>
+
+  {mobileNavOpen ? (
+    <>
+      <button
+        type="button"
+        aria-label="Close navigation overlay"
+        onClick={() => setMobileNavOpen(false)}
+        className="fixed inset-x-0 bottom-0 top-16 z-[55] bg-black/50"
+      />
+
+      <div
+        className="
+          absolute right-4 top-[4.5rem] z-[60] w-[calc(100vw-2rem)] max-w-xs overflow-hidden
+          rounded-2xl border border-[var(--border)] p-2
+          shadow-[0_18px_50px_rgba(0,0,0,0.45)]
+        "
+        style={{
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.02), transparent 48px), #161b22",
+        }}
+      >
+        <div className="mb-2 px-2 pt-1">
+          <p className="app-section-header">Navigation</p>
+        </div>
+
+        <div className="space-y-1">
+          {navigationItems.map((item) => {
+            const isActive =
+              pathname === item.href ||
+              (item.href !== "/" && pathname.startsWith(item.href))
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileNavOpen(false)}
+                className={
+                  isActive
+                    ? "flex items-center rounded-xl border border-[rgba(245,158,11,0.32)] bg-[linear-gradient(180deg,rgba(245,158,11,0.10),rgba(217,119,6,0.06))] px-3 py-2.5 text-sm font-medium text-white"
+                    : "flex items-center rounded-xl border border-transparent bg-[rgba(255,255,255,0.02)] px-3 py-2.5 text-sm font-medium text-[var(--text-soft)] hover:border-[var(--border-soft)] hover:bg-[var(--panel-2)] hover:text-white"
+                }
+              >
+                {item.title}
+              </Link>
+            )
+          })}
+        </div>
+
+        <div className="mt-2 border-t border-[var(--border)] pt-2">
+          <button
+            type="button"
+            onClick={() => {
+              setMobileNavOpen(false)
+              handleSignOut()
+            }}
+            className="
+              flex w-full items-center rounded-xl px-3 py-2.5 text-left text-sm
+              font-medium text-[var(--text-soft)] hover:bg-[var(--panel-2)] hover:text-white
+            "
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    </>
+  ) : null}
 </header>
 
       <Sidebar

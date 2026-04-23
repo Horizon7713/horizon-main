@@ -450,12 +450,13 @@ export function MessagesClient({
               )}
 
               <div
-                className={`
-                  fixed inset-0 z-50 overflow-hidden bg-zinc-950 md:relative md:inset-auto md:z-auto md:bg-transparent
-                  transition-transform duration-300 ease-in-out
-                  ${showMobileMessages ? "translate-x-0" : "translate-x-full md:translate-x-0"}
-                `}
-              >
+  className={`
+    fixed inset-x-0 bottom-0 top-16 z-40 overflow-hidden bg-zinc-950
+    md:relative md:inset-auto md:top-auto md:bottom-auto md:z-auto md:bg-transparent
+    transition-transform duration-300 ease-in-out
+    ${showMobileMessages ? "translate-x-0" : "translate-x-full md:translate-x-0"}
+  `}
+>
                 <div className="flex h-full min-h-0 flex-col bg-zinc-950">
                   {!showGallery && (
                     <div className="border-b border-zinc-800 bg-zinc-950">
@@ -470,13 +471,13 @@ export function MessagesClient({
 
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
-                      className={`
-                        fixed inset-0 z-[60] bg-black
-                        transition-transform duration-300 ease-in-out
-                        ${showGallery ? "translate-x-0" : "translate-x-full"}
-                        ${!showGallery ? "pointer-events-none" : ""}
-                      `}
-                    >
+  className={`
+    fixed inset-x-0 bottom-0 top-16 z-[45] bg-black
+    transition-transform duration-300 ease-in-out
+    ${showGallery ? "translate-x-0" : "translate-x-full"}
+    ${!showGallery ? "pointer-events-none" : ""}
+  `}
+>
                       {selectedUser ? (
                         <MessageGallery
                           currentUserId={currentUserId}
@@ -488,12 +489,12 @@ export function MessagesClient({
                     </div>
 
                     <div
-                      className={`min-h-0 flex-1 overflow-y-auto bg-[#0d1118] ${
-                        showGallery ? "hidden md:flex" : "flex"
-                      }`}
-                      onScroll={handleScroll}
-                      ref={scrollContainerRef}
-                    >
+  className={`min-h-0 flex-1 overflow-y-auto bg-[#0d1118] pb-40 md:pb-0 ${
+    showGallery ? "hidden md:flex" : "flex"
+  }`}
+  onScroll={handleScroll}
+  ref={scrollContainerRef}
+>
                       {!selectedUser ? (
                         <div className="flex w-full items-center justify-center p-8">
                           <div className="max-w-md rounded-2xl border border-zinc-800 bg-black px-6 py-10 text-center">
@@ -526,7 +527,7 @@ export function MessagesClient({
                           </div>
                         </div>
                       ) : (
-                        <div className="w-full min-w-0 px-3 py-4 sm:px-4">
+                        <div className="w-full min-w-0 px-3 pt-4 pb-36 sm:px-4 sm:pb-6">
                           {isLoadingMore ? (
                             <div className="pb-3 text-center text-xs text-zinc-500">
                               Loading older messages...

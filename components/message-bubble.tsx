@@ -47,6 +47,7 @@ function FileCard({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
+      download={fileName}
       className={[
         "flex w-full items-center gap-3 rounded-xl border px-3 py-3 transition-colors",
         isCurrentUser
@@ -178,42 +179,127 @@ function SignedFileCard({
   )
 }
 
-function SignedReceiptImageCard({
+function ReceiptImageCard({
   fileUrl,
   fileName,
 }: {
   fileUrl: string
   fileName: string
 }) {
-  const { url: imageUrl } = useSignedStorageUrl(fileUrl, "receipts")
+  return (
+    <a
+      href={fileUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={fileName}
+      className="block w-full overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900"
+    >
+      <div className="bg-black">
+        <img
+          src={fileUrl}
+          alt={fileName}
+          className="max-h-60 w-full object-contain"
+        />
+      </div>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <Receipt className="h-4 w-4 text-zinc-400" />
+        <span className="truncate text-xs text-zinc-400">{fileName}</span>
+      </div>
+    </a>
+  )
+}
 
-  if (!imageUrl) return null
+function ReceiptPdfCard({
+  fileUrl,
+  fileName,
+  isCurrentUser,
+}: {
+  fileUrl: string
+  fileName: string
+  isCurrentUser: boolean
+}) {
+  return (
+    <a
+      href={fileUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={fileName}
+      className={[
+        "block w-full rounded-xl border transition-colors",
+        isCurrentUser
+          ? "border-slate-500/30 bg-slate-700/30 hover:border-slate-400/40 hover:bg-slate-700/40"
+          : "border-zinc-800 bg-zinc-950 hover:border-zinc-700 hover:bg-zinc-900",
+      ].join(" ")}
+    >
+      <div className="overflow-hidden rounded-t-xl border-b border-zinc-800 bg-white">
+        <iframe
+          src={fileUrl}
+          title={fileName}
+          className="h-48 w-full"
+        />
+      </div>
+
+      <div className="flex items-center gap-3 p-3">
+        <Receipt className="h-4 w-4 shrink-0 text-zinc-400" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-sm font-medium text-zinc-100">{fileName}</div>
+          <div className="mt-1 text-xs text-zinc-500">Tap to open or download PDF</div>
+        </div>
+      </div>
+    </a>
+  )
+}
+
+function SignedReceiptPdfCard({
+  fileUrl,
+  fileName,
+  isCurrentUser,
+}: {
+  fileUrl: string
+  fileName: string
+  isCurrentUser: boolean
+}) {
+  const { url } = useSignedStorageUrl(fileUrl, "receipts")
+
+  if (!url) return null
 
   return (
-    <button
-      type="button"
-      onClick={() => window.open(imageUrl, "_blank")}
-      className="w-full rounded-xl border border-zinc-800 bg-zinc-950 text-left transition-colors hover:border-zinc-700 hover:bg-zinc-900"
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      download={fileName}
+      className={[
+        "block w-full rounded-xl border transition-colors",
+        isCurrentUser
+          ? "border-slate-500/30 bg-slate-700/30 hover:border-slate-400/40 hover:bg-slate-700/40"
+          : "border-zinc-800 bg-zinc-950 hover:border-zinc-700 hover:bg-zinc-900",
+      ].join(" ")}
     >
       <div className="flex items-center gap-3 p-3">
-        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-zinc-800 bg-black">
-          <img
-            src={imageUrl}
-            alt="Receipt"
-            className="h-full w-full object-cover"
-          />
+        <div
+          className={[
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border",
+            isCurrentUser
+              ? "border-slate-400/25 bg-slate-800/40"
+              : "border-zinc-800 bg-black",
+          ].join(" ")}
+        >
+          <Receipt className="h-4 w-4 text-zinc-300" />
         </div>
 
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-zinc-100">
             {fileName}
           </div>
-          <div className="mt-1 text-xs text-zinc-500">Image attachment</div>
+          <div className="mt-1 text-xs text-zinc-500">
+            Receipt PDF • tap to open or download
+          </div>
         </div>
 
         <ExternalLink className="h-4 w-4 shrink-0 text-zinc-500" />
       </div>
-    </button>
+    </a>
   )
 }
 
@@ -242,17 +328,24 @@ export function MessageBubble({
     [messages],
   )
   const receiptMessages = useMemo(
-    () => messages.filter((m) => m.type === "receipt"),
-    [messages],
-  )
-  const receiptFiles = useMemo(
-    () => receiptMessages.filter((m) => m.file_url),
-    [receiptMessages],
-  )
-  const receiptText = useMemo(
-    () => receiptMessages.filter((m) => m.content.trim()),
-    [receiptMessages],
-  )
+  () => messages.filter((m) => m.type === "receipt"),
+  [messages],
+)
+
+const receiptFiles = useMemo(
+  () => receiptMessages.filter((m) => !!m.file_url),
+  [receiptMessages],
+)
+
+const attachmentMessages = useMemo(
+  () => messages.filter((m) => !!m.file_url),
+  [messages],
+)
+
+const receiptText = useMemo(
+  () => receiptMessages.filter((m) => m.content.trim()),
+  [receiptMessages],
+)
   const timecardMessages = useMemo(
     () => messages.filter((m) => m.type === "timecard"),
     [messages],
@@ -409,14 +502,79 @@ export function MessageBubble({
 
         <div className={`overflow-hidden rounded-2xl px-3 py-3 sm:px-4 ${bubbleClass}`}>
           <div className="space-y-3">
-            {textMessages.map((msg) => (
-              <p
-                key={msg.id}
-                className="text-sm leading-6 break-words [overflow-wrap:anywhere]"
-              >
+            {textMessages.map((msg, index) => (
+  <p
+    key={`${msg.id}-${index}`}
+    className="text-sm leading-6 break-words [overflow-wrap:anywhere]"
+  >
                 {msg.content}
               </p>
             ))}
+
+{attachmentMessages.length > 0 ? (
+  <div className="space-y-3">
+    {attachmentMessages.map((msg, index) => {
+      const mimeType = msg.mime_type || ""
+      const isImage = mimeType.startsWith("image/")
+      const isVideo = mimeType.startsWith("video/")
+      const isPdf = mimeType === "application/pdf"
+      const fileName = msg.file_url?.split("/").pop() || "attachment"
+
+      if (!msg.file_url) return null
+
+      if (isImage) {
+        return (
+          <MediaImageCard
+            key={`${msg.id}-${index}`}
+            src={msg.file_url}
+            alt={fileName}
+            onOpen={() => openImagePreview(msg.file_url as string, fileName)}
+          />
+        )
+      }
+
+      if (isVideo) {
+        return <MediaVideoCard key={`${msg.id}-${index}`} src={msg.file_url} />
+      }
+
+      if (isPdf) {
+        return (
+          <a
+            key={`${msg.id}-${index}`}
+            href={msg.file_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            download={fileName}
+            className={[
+              "block w-full rounded-xl border transition-colors",
+              isCurrentUser
+                ? "border-slate-500/30 bg-slate-700/30 hover:border-slate-400/40 hover:bg-slate-700/40"
+                : "border-zinc-800 bg-zinc-950 hover:border-zinc-700 hover:bg-zinc-900",
+            ].join(" ")}
+          >
+            <div className="flex items-center gap-3 p-3">
+              <File className="h-4 w-4 shrink-0 text-zinc-400" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-zinc-100">{fileName}</div>
+                <div className="mt-1 text-xs text-zinc-500">Tap to open or download</div>
+              </div>
+            </div>
+          </a>
+        )
+      }
+
+      return (
+        <FileCard
+          key={`${msg.id}-${index}`}
+          href={msg.file_url}
+          fileName={fileName}
+          label="Attachment"
+          isCurrentUser={isCurrentUser}
+        />
+      )
+    })}
+  </div>
+) : null}
 
             {receiptMessages.length > 0 ? (
               <div className="space-y-3">
@@ -463,59 +621,7 @@ export function MessageBubble({
                   </p>
                 ))}
 
-                {receiptFiles.map((msg) => {
-                  const mimeType = msg.mime_type || ""
-                  const isImage = mimeType.startsWith("image/")
-                  const isVideo = mimeType.startsWith("video/")
-                  const isPdf = mimeType === "application/pdf"
-                  const fileName = msg.file_url?.split("/").pop() || "receipt-file"
-
-                  if (!msg.file_url) return null
-
-                  if (isImage) {
-                    return (
-                      <SignedReceiptImageCard
-                        key={msg.id}
-                        fileUrl={msg.file_url}
-                        fileName={fileName}
-                      />
-                    )
-                  }
-
-                  if (isVideo) {
-                    return (
-                      <SignedVideoCard
-                        key={msg.id}
-                        fileUrl={msg.file_url}
-                        bucket="receipts"
-                      />
-                    )
-                  }
-
-                  if (isPdf) {
-                    return (
-                      <SignedFileCard
-                        key={msg.id}
-                        fileUrl={msg.file_url}
-                        bucket="receipts"
-                        fileName={fileName}
-                        label="PDF attachment"
-                        isCurrentUser={isCurrentUser}
-                      />
-                    )
-                  }
-
-                  return (
-                    <SignedFileCard
-                      key={msg.id}
-                      fileUrl={msg.file_url}
-                      bucket="receipts"
-                      fileName={fileName}
-                      label="File attachment"
-                      isCurrentUser={isCurrentUser}
-                    />
-                  )
-                })}
+              
               </div>
             ) : null}
 

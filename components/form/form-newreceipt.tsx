@@ -218,13 +218,14 @@ export function FormNewReceipt({
       // Only process files if they exist
       if (filesToUpload.length > 0) {
         for (const file of filesToUpload) {
-          const uploadFormData = new FormData()
-          uploadFormData.append("file", file)
-
           const uploadResponse = await fetch("/api/upload", {
-            method: "POST",
-            body: uploadFormData,
-          })
+  method: "POST",
+  headers: {
+    "Content-Type": file.type || "application/octet-stream",
+    "x-filename": encodeURIComponent(file.name),
+  },
+  body: file,
+})
 
           if (!uploadResponse.ok) {
             console.error(`[v0] Failed to upload file: ${file.name}`)
@@ -238,11 +239,11 @@ export function FormNewReceipt({
           })
         }
 
-        if (filesToUpload.length > 0 && fileData.length === 0) {
-          setError("Failed to upload files")
-          setLoading(false)
-          return
-        }
+        if (fileData.length === 0) {
+  setError("Failed to upload files")
+  setLoading(false)
+  return
+}
       }
 
       const formData = new FormData()
@@ -641,43 +642,61 @@ console.log("[v0] Receipt analysis parsed result:", result)
         )}
 
       {viewMode && initialData && initialData.files.length > 0 && (
-        <div className="space-y-2">
-          <Label className="text-xs font-medium">Receipt Files</Label>
-          <div className="space-y-1.5">
-            {initialData.files.map((file, index) => {
-              const isImage = file.mimeType?.startsWith("image/")
+  <div className="space-y-2">
+    <Label className="text-xs font-medium">Receipt Files</Label>
+    <div className="space-y-2">
+      {initialData.files.map((file, index) => {
+        const isImage = file.mimeType?.startsWith("image/")
+        const isPdf = file.mimeType === "application/pdf"
 
-              if (isImage && file.url) {
-                return (
-                  <div key={index} className="rounded overflow-hidden bg-muted/50">
-                    <img
-                      src={file.url || "/placeholder.svg"}
-                      alt="Receipt"
-                      className="max-h-48 w-full object-contain rounded cursor-pointer"
-                      onClick={() => window.open(file.url!, "_blank")}
-                    />
-                  </div>
-                )
-              } else if (file.url) {
-                const fileName = file.url.split("/").pop() || "file"
-                return (
-                  <a
-                    key={index}
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 p-1.5 bg-muted rounded text-xs hover:underline"
-                  >
-                    <File className="size-3" />
-                    <span className="truncate">{fileName}</span>
-                  </a>
-                )
-              }
-              return null
-            })}
-          </div>
-        </div>
-      )}
+        if (isImage && file.url) {
+          return (
+            <a
+              key={index}
+              href={file.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              download
+              className="block overflow-hidden rounded-lg border border-input bg-muted/50"
+            >
+              <img
+                src={file.url}
+                alt="Receipt"
+                className="max-h-56 w-full object-contain"
+              />
+              <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                Tap to open or download
+              </div>
+            </a>
+          )
+        }
+
+        if (file.url) {
+          const fileName = file.url.split("/").pop() || "file"
+
+          return (
+            <a
+              key={index}
+              href={file.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              download={fileName}
+              className="flex items-center gap-2 rounded border border-input bg-muted px-3 py-2 text-xs hover:underline"
+            >
+              <File className="size-3.5" />
+              <span className="truncate flex-1">
+                {isPdf ? "Receipt PDF" : fileName}
+              </span>
+              <span className="text-muted-foreground">Open</span>
+            </a>
+          )
+        }
+
+        return null
+      })}
+    </div>
+  </div>
+)}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="space-y-1.5">

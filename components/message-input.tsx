@@ -242,7 +242,7 @@ export function MessageInput({
           </div>
         ) : null}      
 
-<div className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-800 bg-black p-2 md:static md:border-0 md:bg-transparent md:p-0">
+<div className="sticky bottom-0 z-30 border-t border-zinc-800 bg-black p-2 md:static md:border-0 md:bg-transparent md:p-0">
   <div className="space-y-2">
     <div className="flex items-center gap-1">
       <Button
