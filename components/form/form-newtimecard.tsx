@@ -35,6 +35,7 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const submittingRef = useRef(false)
 
   useEffect(() => {
     const fetchUserProjects = async () => {
@@ -75,12 +76,25 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
     fileInputRef.current?.click()
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length > 0) {
-      setSelectedFiles((prev) => [...prev, ...files])
-    }
+  const getFileKey = (file: File) => `${file.name}-${file.size}-${file.lastModified}`
+
+const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const files = Array.from(e.target.files || [])
+
+  if (files.length > 0) {
+    setSelectedFiles((prev) => {
+      const existingKeys = new Set(prev.map(getFileKey))
+      const newUniqueFiles = files.filter((file) => !existingKeys.has(getFileKey(file)))
+
+      return [...prev, ...newUniqueFiles]
+    })
   }
+
+  // Allows selecting the same file later after removing it
+  if (fileInputRef.current) {
+    fileInputRef.current.value = ""
+  }
+}
 
   const handleRemoveFile = (index: number) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
@@ -92,20 +106,26 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (submittingRef.current) return
+submittingRef.current = true
+
     if (selectedFiles.length === 0) {
-      setError("Please select at least one file")
-      return
-    }
+  setError("Please select at least one file")
+  submittingRef.current = false
+  return
+}
 
-    if (!selectedProject) {
-      setError("Please select a project")
-      return
-    }
+if (!selectedProject) {
+  setError("Please select a project")
+  submittingRef.current = false
+  return
+}
 
-    if (!selectedWork) {
-      setError("Please select a work type")
-      return
-    }
+if (!selectedWork) {
+  setError("Please select a work type")
+  submittingRef.current = false
+  return
+}
 
     setLoading(true)
     setError(null)
@@ -115,26 +135,34 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
 
       // Upload all files
       const fileData: Array<{ url: string; mimeType: string }> = []
-      for (const file of selectedFiles) {
-        const uploadFormData = new FormData()
-        uploadFormData.append("file", file)
 
-        const uploadResponse = await fetch("/api/upload", {
-          method: "POST",
-          body: uploadFormData,
-        })
+const uniqueFiles = selectedFiles.filter(
+  (file, index, arr) =>
+    index === arr.findIndex((other) => getFileKey(other) === getFileKey(file)),
+)
 
-        if (!uploadResponse.ok) {
-          console.error(`[v0] Failed to upload file: ${file.name}`)
-          continue
-        }
+for (const file of uniqueFiles) {
+  const uploadResponse = await fetch("/api/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": file.type || "application/octet-stream",
+      "x-filename": encodeURIComponent(file.name),
+    },
+    body: file,
+  })
 
-        const uploadResult = await uploadResponse.json()
-        fileData.push({
-          url: uploadResult.url,
-          mimeType: uploadResult.contentType,
-        })
-      }
+  if (!uploadResponse.ok) {
+    console.error(`[v0] Failed to upload file: ${file.name}`)
+    continue
+  }
+
+  const uploadResult = await uploadResponse.json()
+
+  fileData.push({
+    url: uploadResult.url,
+    mimeType: uploadResult.contentType || file.type || "application/octet-stream",
+  })
+}
 
       if (fileData.length === 0) {
         setError("Failed to upload files")
@@ -167,7 +195,8 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
     } catch (err) {
       console.error("[v0] Error submitting timecard:", err)
       setError("An error occurred. Please try again.")
-    } finally {
+        } finally {
+      submittingRef.current = false
       setLoading(false)
     }
   }
@@ -248,13 +277,15 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
             <SelectValue placeholder="Select work type" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="Framing">Framing</SelectItem>
-            <SelectItem value="Concrete">Concrete</SelectItem>
-            <SelectItem value="Finish">Finish</SelectItem>
-            <SelectItem value="Metal">Metal</SelectItem>
-            <SelectItem value="Painting">Painting</SelectItem>
-            <SelectItem value="Appliance Install">Appliance Install</SelectItem>
-          </SelectContent>
+  <SelectItem value="Framing">Framing</SelectItem>
+  <SelectItem value="Concrete">Concrete</SelectItem>
+  <SelectItem value="Excavation">Excavation</SelectItem>
+  <SelectItem value="Finish">Finish</SelectItem>
+  <SelectItem value="Landscaping">Landscaping</SelectItem>
+  <SelectItem value="Metal">Metal</SelectItem>
+  <SelectItem value="Painting">Painting</SelectItem>
+  <SelectItem value="Appliance Install">Appliance Install</SelectItem>
+</SelectContent>
         </Select>
       </div>
 

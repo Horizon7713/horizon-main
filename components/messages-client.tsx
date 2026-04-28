@@ -104,9 +104,19 @@ export function MessagesClient({
           table: "messages",
         },
         (payload: { new: Message }) => {
-          console.log("[v0] Realtime: New message received", payload)
-
           const newMessage = payload.new as Message
+
+console.log("[v0] Realtime new message details", {
+  id: newMessage.id,
+  type: newMessage.type,
+  content: newMessage.content,
+  file_url: newMessage.file_url,
+  mime_type: newMessage.mime_type,
+  bundle_id: newMessage.bundle_id,
+  status: newMessage.status,
+  user_id: newMessage.user_id,
+  receiver_id: newMessage.receiver_id,
+})
 
           const isRelevant =
             (newMessage.user_id === currentUserId && newMessage.receiver_id === selectedUser.id) ||
@@ -128,7 +138,13 @@ export function MessagesClient({
             console.log("[v0] Adding new message from realtime subscription")
 
             messageCache.addMessage(currentUserId, selectedUser.id, newMessage).catch(console.error)
-            setAllCachedMessages((prev) => [...prev, newMessage])
+            setAllCachedMessages((prev) => {
+  if (prev.some((msg) => msg.id === newMessage.id)) {
+    return prev
+  }
+
+  return [...prev, newMessage]
+})
 
             if (shouldScroll) {
               setShouldAutoScroll(true)
@@ -539,19 +555,37 @@ export function MessagesClient({
                               const firstMessage = group.messages[0]
                               const isCurrentUser = firstMessage.user_id === currentUserId
 
+                              console.log(
+  "[MessagesClient] rendering group details",
+  group.messages.map((m) => ({
+    id: m.id,
+    type: m.type,
+    content: m.content,
+    file_url: m.file_url,
+    mime_type: m.mime_type,
+    bundle_id: m.bundle_id,
+    status: m.status,
+  }))
+)
+
                               const sender = !isCurrentUser ? users.find((u) => u.id === firstMessage.user_id) : null
                               const senderName = sender ? getDisplayName(sender) : undefined
                               const senderInitials = sender ? getInitials(sender.first_name, sender.last_name) : undefined
 
-                              return (
-                                <MessageBubble
-                                  key={groupIndex}
-                                  messages={group.messages}
-                                  isCurrentUser={isCurrentUser}
-                                  senderName={senderName}
-                                  senderInitials={senderInitials}
-                                />
-                              )
+                              const uniqueGroupMessages = group.messages.filter(
+  (message, index, arr) =>
+    index === arr.findIndex((other) => other.id === message.id),
+)
+
+return (
+  <MessageBubble
+    key={uniqueGroupMessages.map((message) => message.id).join("-")}
+    messages={uniqueGroupMessages}
+    isCurrentUser={isCurrentUser}
+    senderName={senderName}
+    senderInitials={senderInitials}
+  />
+)
                             })}
                           </div>
                         </div>

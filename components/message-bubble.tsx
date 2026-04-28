@@ -338,10 +338,17 @@ const receiptFiles = useMemo(
 )
 
 const attachmentMessages = useMemo(
-  () => messages.filter((m) => !!m.file_url),
+  () =>
+    messages.filter(
+      (m) =>
+        !!m.file_url &&
+        m.type !== "timecard" &&
+        m.type !== "receipt" &&
+        m.type !== "media" &&
+        m.type !== "file",
+    ),
   [messages],
 )
-
 const receiptText = useMemo(
   () => receiptMessages.filter((m) => m.content.trim()),
   [receiptMessages],
