@@ -35,7 +35,9 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const submittingRef = useRef(false)
+const cameraInputRef = useRef<HTMLInputElement>(null)
+const photosInputRef = useRef<HTMLInputElement>(null)
+const submittingRef = useRef(false)
 
   useEffect(() => {
     const fetchUserProjects = async () => {
@@ -73,8 +75,16 @@ export function FormNewTimecard({ userId, receiverId, onSuccess, onCancel, sendM
   }, [userId])
 
   const handleFileClick = () => {
-    fileInputRef.current?.click()
-  }
+  fileInputRef.current?.click()
+}
+
+const handleCameraClick = () => {
+  cameraInputRef.current?.click()
+}
+
+const handlePhotosClick = () => {
+  photosInputRef.current?.click()
+}
 
   const getFileKey = (file: File) => `${file.name}-${file.size}-${file.lastModified}`
 
@@ -91,9 +101,7 @@ const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   }
 
   // Allows selecting the same file later after removing it
-  if (fileInputRef.current) {
-    fileInputRef.current.value = ""
-  }
+  e.target.value = ""
 }
 
   const handleRemoveFile = (index: number) => {
@@ -212,25 +220,69 @@ for (const file of uniqueFiles) {
       <div className="space-y-2">
         <Label>Timecard Files/Images</Label>
         <input
-          ref={fileInputRef}
-          type="file"
-          multiple
-          accept="image/*,application/pdf"
-          className="hidden"
-          onChange={handleFileChange}
-          disabled={loading}
-        />
+  ref={fileInputRef}
+  type="file"
+  multiple
+  accept="image/*,application/pdf"
+  className="hidden"
+  onChange={handleFileChange}
+  disabled={loading}
+/>
 
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full bg-transparent"
-          onClick={handleFileClick}
-          disabled={loading}
-        >
-          <Upload className="mr-2 size-4" />
-          Upload Files
-        </Button>
+<input
+  ref={cameraInputRef}
+  type="file"
+  accept="image/*"
+  capture="environment"
+  className="hidden"
+  onChange={handleFileChange}
+  disabled={loading}
+/>
+
+<input
+  ref={photosInputRef}
+  type="file"
+  multiple
+  accept="image/*"
+  className="hidden"
+  onChange={handleFileChange}
+  disabled={loading}
+/>
+
+        <div className="grid gap-2 sm:grid-cols-3">
+  <Button
+    type="button"
+    variant="outline"
+    className="w-full bg-transparent"
+    onClick={handleFileClick}
+    disabled={loading}
+  >
+    <Upload className="mr-2 size-4" />
+    Upload File
+  </Button>
+
+  <Button
+    type="button"
+    variant="outline"
+    className="w-full bg-transparent"
+    onClick={handleCameraClick}
+    disabled={loading}
+  >
+    <Upload className="mr-2 size-4" />
+    Take Photo
+  </Button>
+
+  <Button
+    type="button"
+    variant="outline"
+    className="w-full bg-transparent"
+    onClick={handlePhotosClick}
+    disabled={loading}
+  >
+    <Upload className="mr-2 size-4" />
+    Upload from Photos
+  </Button>
+</div>
 
         {selectedFiles.length > 0 && (
           <div className="space-y-1 mt-2">

@@ -435,7 +435,7 @@ export function MessageGallery({ currentUserId, selectedUserId, fetchMessagesAct
         </Select>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain touch-pan-y p-4">
         {isLoading ? (
           <div className="text-center text-muted-foreground text-sm py-8">Loading all messages...</div>
         ) : displayItems.length === 0 ? (
