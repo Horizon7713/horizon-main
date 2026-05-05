@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Popup } from "@/components/popup"
 import { supabase } from "@/lib/supabase/client"
+import { LanguageToggle } from "@/components/language/language-toggle"
+import { useLanguage } from "@/components/language/language-provider"
 import {
   createCalendarEventAction,
   fetchCalendarEventsAction,
@@ -48,17 +50,21 @@ function parseAssignedUsers(users: string | null | undefined): string[] {
     .filter(Boolean)
 }
 
-function formatEventTime(dateString: string): string {
+function getLocale(language: "en" | "es") {
+  return language === "es" ? "es-ES" : "en-US"
+}
+
+function formatEventTime(dateString: string, language: "en" | "es"): string {
   const eventDate = new Date(dateString)
 
-  return eventDate.toLocaleTimeString("default", {
+  return eventDate.toLocaleTimeString(getLocale(language), {
     hour: "numeric",
     minute: "2-digit",
   })
 }
 
-function formatSelectedDate(date: Date): string {
-  return date.toLocaleDateString("default", {
+function formatSelectedDate(date: Date, language: "en" | "es"): string {
+  return date.toLocaleDateString(getLocale(language), {
     weekday: "long",
     month: "long",
     day: "numeric",
@@ -135,6 +141,7 @@ function SectionHeader({
 }
 
 export default function CalendarPage() {
+  const { language, t } = useLanguage()
   const today = useMemo(() => new Date(), [])
 
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -342,7 +349,7 @@ export default function CalendarPage() {
 
   const handleCreateEvent = async () => {
     if (!formData.datetime || !formData.project || formData.users.length === 0) {
-      alert("Please fill in date, project, and assigned users.")
+      alert(t("requiredEventFields"))
       return
     }
 
@@ -384,7 +391,7 @@ export default function CalendarPage() {
       setPopupOpen(false)
     } catch (error) {
       console.error("Error creating event:", error)
-      alert("Failed to create event")
+      alert(t("failedCreateEvent"))
     } finally {
       setCreatingEvent(false)
     }
@@ -440,7 +447,7 @@ export default function CalendarPage() {
   const getProjectName = (projectId: number) => {
     return (
       projects.find((project) => String(project.id) === String(projectId))?.name ||
-      "Unassigned project"
+      t("unassignedProject")
     )
   }
 
@@ -479,12 +486,15 @@ export default function CalendarPage() {
     days.push(i)
   }
 
-  const monthName = currentDate.toLocaleString("default", {
+  const monthName = currentDate.toLocaleString(getLocale(language), {
     month: "long",
     year: "numeric",
   })
 
-  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const weekDays =
+    language === "es"
+      ? ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"]
+      : ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
   return (
     <main className="min-h-full bg-black px-3 py-3 text-zinc-100 sm:px-5 sm:py-5">
@@ -493,23 +503,25 @@ export default function CalendarPage() {
           <div className="flex flex-col gap-4 border-b border-zinc-800 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
             <div className="min-w-0">
               <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
-                Enterprise Workspace
+                {t("enterpriseWorkspace")}
               </div>
               <div className="mt-1 text-lg font-semibold text-zinc-100">
-                Calendar
+                {t("calendar")}
               </div>
               <div className="mt-1 text-sm leading-relaxed text-zinc-500">
-                View jobsite events, inspections, meetings, deadlines, and assigned work by day.
+                {t("calendarDescription")}
               </div>
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row">
+              <LanguageToggle />
+
               <Button
                 variant="outline"
                 onClick={goToToday}
                 className="border-zinc-800 bg-black text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100"
               >
-                Today
+                {t("today")}
               </Button>
 
               {userRole === "contractor" ? (
@@ -518,7 +530,7 @@ export default function CalendarPage() {
                   onClick={openCreateForSelectedDate}
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  New Event
+                  {t("newEvent")}
                 </Button>
               ) : null}
             </div>
@@ -532,7 +544,7 @@ export default function CalendarPage() {
                     {monthName}
                   </h2>
                   <p className="mt-1 text-xs text-zinc-500">
-                    Tap a day to review scheduled events.
+                    {t("tapDay")}
                   </p>
                 </div>
 
@@ -634,12 +646,12 @@ export default function CalendarPage() {
                               <div className="mb-1 flex items-center gap-1 text-blue-200">
                                 <Clock className="h-3 w-3 shrink-0" />
                                 <span className="text-[11px] font-semibold">
-                                  {formatEventTime(event.date)}
+                                  {formatEventTime(event.date, language)}
                                 </span>
                               </div>
 
                               <div className="truncate text-xs font-medium text-zinc-100">
-                                {eventType || event.content || "Calendar event"}
+                                {eventType || event.content || t("calendarEvent")}
                               </div>
 
                               {event.content ? (
@@ -684,9 +696,9 @@ export default function CalendarPage() {
               <section className="rounded-2xl border border-zinc-800 bg-black p-4">
                 <SectionHeader
                   icon={CalendarDays}
-                  eyebrow="Selected Day"
-                  title={formatSelectedDate(selectedDate)}
-                  subtitle="Events, assignments, projects, and priorities for this date."
+                  eyebrow={t("selectedDay")}
+                  title={formatSelectedDate(selectedDate, language)}
+                  subtitle={t("eventSetupSubtitle")}
                 />
 
                 <div className="mb-4 grid grid-cols-3 gap-2">
@@ -694,35 +706,35 @@ export default function CalendarPage() {
                     <div className="text-lg font-semibold text-zinc-100">
                       {eventStatsForSelectedDate.total}
                     </div>
-                    <div className="mt-1 text-[11px] text-zinc-500">Events</div>
+                    <div className="mt-1 text-[11px] text-zinc-500">{t("events")}</div>
                   </div>
 
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                     <div className="text-lg font-semibold text-zinc-100">
                       {eventStatsForSelectedDate.projectCount}
                     </div>
-                    <div className="mt-1 text-[11px] text-zinc-500">Projects</div>
+                    <div className="mt-1 text-[11px] text-zinc-500">{t("projects")}</div>
                   </div>
 
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                     <div className="text-lg font-semibold text-zinc-100">
                       {eventStatsForSelectedDate.highPriorityCount}
                     </div>
-                    <div className="mt-1 text-[11px] text-zinc-500">High</div>
+                    <div className="mt-1 text-[11px] text-zinc-500">{t("high")}</div>
                   </div>
                 </div>
 
                 {loadingEvents ? (
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-6 text-sm text-zinc-500">
-                    Loading calendar events...
+                    {t("loadingCalendarEvents")}
                   </div>
                 ) : selectedDateEvents.length === 0 ? (
                   <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-6">
                     <div className="text-sm font-medium text-zinc-200">
-                      Nothing scheduled for this day.
+                      {t("nothingScheduled")}
                     </div>
                     <p className="mt-1 text-sm leading-relaxed text-zinc-500">
-                      Select another date or create an event for this day.
+                      {t("selectAnotherDate")}
                     </p>
 
                     {userRole === "contractor" ? (
@@ -731,7 +743,7 @@ export default function CalendarPage() {
                         className="mt-4 border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800"
                       >
                         <Plus className="mr-2 h-4 w-4" />
-                        Add Event
+                        {t("addEvent")}
                       </Button>
                     ) : null}
                   </div>
@@ -752,12 +764,12 @@ export default function CalendarPage() {
                               <div className="flex items-center gap-2 text-blue-200">
                                 <Clock className="h-3.5 w-3.5 shrink-0" />
                                 <span className="text-xs font-semibold">
-                                  {formatEventTime(event.date)}
+                                  {formatEventTime(event.date, language)}
                                 </span>
                               </div>
 
                               <h4 className="mt-2 text-sm font-semibold leading-relaxed text-zinc-100">
-                                {eventType || "Calendar event"}
+                                {eventType || t("calendarEvent")}
                               </h4>
 
                               {event.content ? (
@@ -799,15 +811,15 @@ export default function CalendarPage() {
               <section className="rounded-2xl border border-zinc-800 bg-black p-4">
                 <SectionHeader
                   icon={Clock}
-                  eyebrow="Schedule Outlook"
-                  title="Upcoming Events"
-                  subtitle="Your next assigned calendar items."
+                  eyebrow={t("upcomingEvents")}
+                  title={t("upcomingEvents")}
+                  subtitle={t("calendarDescription")}
                 />
 
                 <div className="space-y-3">
                   {upcomingEvents.length === 0 ? (
                     <div className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-6 text-sm text-zinc-500">
-                      No upcoming events
+                      {t("noUpcomingEvents")}
                     </div>
                   ) : (
                     upcomingEvents.map((event) => {
@@ -829,15 +841,15 @@ export default function CalendarPage() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
                               <h4 className="truncate text-sm font-semibold text-zinc-100">
-                                {eventType || "Calendar event"}
+                                {eventType || t("calendarEvent")}
                               </h4>
                               <p className="mt-1 text-xs text-zinc-500">
-                                {eventDate.toLocaleDateString("default", {
+                                {eventDate.toLocaleDateString(getLocale(language), {
                                   month: "long",
                                   day: "numeric",
                                   year: "numeric",
                                 })}{" "}
-                                at {formatEventTime(event.date)}
+                                at {formatEventTime(event.date, language)}
                               </p>
 
                               {event.content ? (
@@ -860,22 +872,22 @@ export default function CalendarPage() {
         <Popup
           open={popupOpen}
           onOpenChange={setPopupOpen}
-          title="Create New Event"
-          description="Create a scheduled event and choose or type a custom event type."
+          title={t("createNewEvent")}
+          description={t("eventPopupDescription")}
         >
           <div className="space-y-5">
             <div className="rounded-2xl border border-zinc-800 bg-black p-4">
               <SectionHeader
                 icon={CalendarDays}
-                eyebrow="Event Setup"
-                title="Schedule Event"
-                subtitle="Assign project, users, priority, details, and choose or create an event type."
+                eyebrow={t("eventSetup")}
+                title={t("scheduleEvent")}
+                subtitle={t("eventSetupSubtitle")}
               />
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-zinc-300">
-                    Date & Time <span className="text-red-400">*</span>
+                    {t("dateAndTime")} <span className="text-red-400">*</span>
                   </label>
                   <input
                     type="datetime-local"
@@ -889,7 +901,7 @@ export default function CalendarPage() {
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-zinc-300">
-                    Project <span className="text-red-400">*</span>
+                    {t("project")} <span className="text-red-400">*</span>
                   </label>
                   <div className="relative">
                     <Briefcase className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
@@ -900,7 +912,7 @@ export default function CalendarPage() {
                       }
                       className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 pl-9 pr-3 text-zinc-100 outline-none focus:border-zinc-700"
                     >
-                      <option value="">Select a project</option>
+                      <option value="">{t("selectProject")}</option>
                       {projects.map((project) => (
                         <option key={project.id} value={project.id}>
                           {project.name}
@@ -912,12 +924,12 @@ export default function CalendarPage() {
 
                 <div className="space-y-2 md:col-span-2">
                   <label className="block text-sm font-medium text-zinc-300">
-                    Assigned To <span className="text-red-400">*</span>
+                    {t("assignedTo")} <span className="text-red-400">*</span>
                   </label>
 
                   <div className="max-h-52 overflow-y-auto rounded-xl border border-zinc-800 bg-zinc-950 p-3">
                     {users.length === 0 ? (
-                      <p className="text-sm text-zinc-500">No users available</p>
+                      <p className="text-sm text-zinc-500">{t("noUsersAvailable")}</p>
                     ) : (
                       <div className="space-y-2">
                         {users.map((user) => (
@@ -957,14 +969,14 @@ export default function CalendarPage() {
 
                   {formData.users.length > 0 ? (
                     <p className="text-xs text-zinc-500">
-                      {formData.users.length} user(s) selected
+                      {formData.users.length} {t("usersSelected")}
                     </p>
                   ) : null}
                 </div>
 
                 <div className="space-y-2 md:col-span-2">
                   <label className="block text-sm font-medium text-zinc-300">
-                    Event Type
+                    {t("eventType")}
                   </label>
 
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -980,7 +992,7 @@ export default function CalendarPage() {
                       disabled={Boolean(formData.customEventType.trim())}
                       className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-zinc-100 outline-none focus:border-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      <option value="">Select existing event type</option>
+                      <option value="">{t("selectExistingEventType")}</option>
                       {eventTypes.map((type) => (
                         <option key={type.id} value={type.id}>
                           {type.name}
@@ -998,19 +1010,19 @@ export default function CalendarPage() {
                           eventType: "",
                         })
                       }
-                      placeholder="Or type a new event type"
+                      placeholder={t("typeNewEventType")}
                       className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
                     />
                   </div>
 
                   <p className="text-xs leading-relaxed text-zinc-500">
-                    Contractors can choose an existing event type or type a new one, like “Cabinet Delivery”, “Final Walkthrough”, or “Client Selection Meeting”.
+                    {t("eventTypeHelp")}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-zinc-300">
-                    Priority
+                    {t("priority")}
                   </label>
                   <div className="relative">
                     <Flag className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
@@ -1021,7 +1033,7 @@ export default function CalendarPage() {
                       }
                       className="h-11 w-full rounded-xl border border-zinc-800 bg-zinc-950 pl-9 pr-3 text-zinc-100 outline-none focus:border-zinc-700"
                     >
-                      <option value="">Select priority</option>
+                      <option value="">{t("selectPriority")}</option>
                       {priorities.map((priority) => (
                         <option key={priority.id} value={priority.id}>
                           {priority.name}
@@ -1033,7 +1045,7 @@ export default function CalendarPage() {
 
                 <div className="space-y-2 md:col-span-2">
                   <label className="block text-sm font-medium text-zinc-300">
-                    Description
+                    {t("description")}
                   </label>
 
                   <div className="relative">
@@ -1044,7 +1056,7 @@ export default function CalendarPage() {
                       onChange={(event) =>
                         setFormData({ ...formData, content: event.target.value })
                       }
-                      placeholder="Enter event details..."
+                      placeholder={t("enterEventDetails")}
                       rows={4}
                       className="w-full rounded-xl border border-zinc-800 bg-zinc-950 py-3 pl-9 pr-3 text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
                     />
@@ -1060,7 +1072,7 @@ export default function CalendarPage() {
                 disabled={creatingEvent}
                 className="border-zinc-800 bg-black text-zinc-300 hover:border-zinc-700 hover:bg-zinc-900 hover:text-zinc-100"
               >
-                Cancel
+                {t("cancel")}
               </Button>
 
               <Button
@@ -1068,7 +1080,7 @@ export default function CalendarPage() {
                 disabled={creatingEvent}
                 className="border border-zinc-700 bg-zinc-900 text-zinc-100 hover:border-zinc-600 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {creatingEvent ? "Creating..." : "Create Event"}
+                {creatingEvent ? t("creating") : t("createEvent")}
               </Button>
             </div>
           </div>

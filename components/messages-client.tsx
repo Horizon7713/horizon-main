@@ -35,6 +35,9 @@ type Message = {
   bundle_id?: string | null
   mime_type?: string | null
   current_project?: string | null
+  original_content?: string | null
+  original_language?: "en" | "es" | string | null
+  translated_content?: Record<string, string> | null
 }
 
 interface MessagesClientProps {

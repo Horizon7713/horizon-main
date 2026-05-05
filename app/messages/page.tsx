@@ -18,6 +18,24 @@ async function sendMessage(formData: FormData) {
   const category = formData.get("category") as string
   const vendorName = formData.get("vendorName") as string
 
+  const originalContent = String(formData.get("originalContent") || content || "").trim()
+  const originalLanguage = String(formData.get("originalLanguage") || "en")
+  const translatedContentRaw = String(formData.get("translatedContent") || "{}")
+
+  let translatedContent: Record<string, string> = {}
+
+  try {
+    translatedContent = JSON.parse(translatedContentRaw)
+  } catch {
+    translatedContent = {}
+  }
+
+  if (originalContent && Object.keys(translatedContent).length === 0) {
+    translatedContent = {
+      [originalLanguage]: originalContent,
+    }
+  }
+
   if ((!content && !fileDataJson) || !authUserId || !receiverId || !bundleId) {
     return { error: "Missing required fields" }
   }
@@ -52,6 +70,9 @@ async function sendMessage(formData: FormData) {
       mime_type: null,
       current_project: currentProject || null,
       progress_update: progressUpdate || null,
+      original_content: originalContent || content.trim(),
+      original_language: originalLanguage,
+      translated_content: translatedContent,
     })
   }
 
@@ -68,6 +89,9 @@ async function sendMessage(formData: FormData) {
       mime_type: file.mimeType,
       current_project: currentProject || null,
       progress_update: progressUpdate || null,
+      original_content: null,
+      original_language: originalLanguage,
+      translated_content: {},
     })
   }
 
@@ -134,7 +158,6 @@ async function sendMessage(formData: FormData) {
     if (receiptError) {
       console.error("[v0] Error creating receipt entry:", receiptError)
     } else if (receiptData && itemsPurchasedJson) {
-      // Insert receipt items into receipts_breakdown table
       try {
         const itemsPurchased = JSON.parse(itemsPurchasedJson)
         if (Array.isArray(itemsPurchased) && itemsPurchased.length > 0) {
@@ -143,7 +166,7 @@ async function sendMessage(formData: FormData) {
             name: item.name || "",
             quantity: item.quantity || 1,
             price: item.price || 0,
-            type: null, // Can be set later if needed
+            type: null,
           }))
 
           const { error: breakdownError } = await supabase.from("receipts_breakdown").insert(breakdownItems)
@@ -189,8 +212,11 @@ async function fetchMessages(
       file_url,
       bundle_id,
       mime_type,
-      current_project,
-      progress_update
+            current_project,
+      progress_update,
+      original_content,
+      original_language,
+      translated_content
     `,
       { count: "exact" },
     )

@@ -1,22 +1,25 @@
-import "./globals.css";
-import type { Metadata } from "next";
-import { LayoutWrapper } from "@/components/layout-wrapper";
+import "./globals.css"
+import type { Metadata } from "next"
+import { LayoutWrapper } from "@/components/layout-wrapper"
+import { LanguageProvider } from "@/components/language/language-provider"
 
 export const metadata: Metadata = {
   title: "Material Intelligence",
   description: "Enterprise takeoff and project material intelligence platform",
-};
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
     <html lang="en" className="dark">
       <body suppressHydrationWarning className="app-shell">
-        <LayoutWrapper>{children}</LayoutWrapper>
+        <LanguageProvider>
+          <LayoutWrapper>{children}</LayoutWrapper>
+        </LanguageProvider>
       </body>
     </html>
-  );
+  )
 }

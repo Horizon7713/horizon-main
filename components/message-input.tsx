@@ -10,6 +10,7 @@ import { FormNewReceipt } from "@/components/form/form-newreceipt"
 import { FormNewTimecard } from "@/components/form/form-newtimecard"
 import { FormAttachMedia } from "@/components/form/form-attachmedia"
 import { offlineQueue } from "@/lib/offline-queue"
+import { useLanguage } from "@/components/language/language-provider"
 
 interface MessageInputProps {
   userId: string
@@ -25,6 +26,7 @@ export function MessageInput({
   receiverId,
 }: MessageInputProps) {
   const [message, setMessage] = useState("")
+    const { language } = useLanguage()
   const [isLoading, setIsLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [receiptPopupOpen, setReceiptPopupOpen] = useState(false)
@@ -46,6 +48,62 @@ export function MessageInput({
     return undefined
   }
 
+    const translateMessage = async ({
+    text,
+    targetLanguage,
+  }: {
+    text: string
+    targetLanguage: "en" | "es"
+  }) => {
+    const response = await fetch("/api/messages/translate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        text,
+        targetLanguage,
+      }),
+    })
+
+    const result = await response.json()
+
+    if (!result.success) {
+      throw new Error(result.error || "Failed to translate message")
+    }
+
+    return String(result.translatedText || text)
+  }
+
+  const appendTranslationFields = async (formData: FormData, content: string) => {
+    const originalContent = content.trim()
+    const originalLanguage = language === "es" ? "es" : "en"
+    const targetLanguage = originalLanguage === "en" ? "es" : "en"
+
+    let translatedText = originalContent
+
+    if (originalContent) {
+      try {
+        translatedText = await translateMessage({
+          text: originalContent,
+          targetLanguage,
+        })
+      } catch (error) {
+        console.error("[MessageInput] Translation failed:", error)
+      }
+    }
+
+    formData.append("originalContent", originalContent)
+    formData.append("originalLanguage", originalLanguage)
+    formData.append(
+      "translatedContent",
+      JSON.stringify({
+        [originalLanguage]: originalContent,
+        [targetLanguage]: translatedText,
+      }),
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -57,8 +115,12 @@ export function MessageInput({
       const isOnline = offlineQueue.getIsOnline()
 
       if (!isOnline) {
-        const formData = new FormData()
-        formData.append("content", message.trim())
+                const formData = new FormData()
+        const trimmedMessage = message.trim()
+
+        formData.append("content", trimmedMessage)
+        await appendTranslationFields(formData, trimmedMessage)
+
         formData.append("bundleId", crypto.randomUUID())
         formData.append("userId", userId)
         formData.append("receiverId", receiverId || "")
@@ -124,8 +186,12 @@ export function MessageInput({
         return
       }
 
-      const formData = new FormData()
-      formData.append("content", message.trim())
+            const formData = new FormData()
+      const trimmedMessage = message.trim()
+
+      formData.append("content", trimmedMessage)
+      await appendTranslationFields(formData, trimmedMessage)
+
       formData.append("fileData", JSON.stringify(fileData))
       formData.append("bundleId", bundleId)
       formData.append("userId", userId)

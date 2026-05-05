@@ -7,6 +7,7 @@ import { useSignedStorageUrl } from "@/hooks/useSignedStorageUrl"
 import { Popup } from "@/components/popup"
 import { FormNewReceipt } from "@/components/form/form-newreceipt"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useLanguage } from "@/components/language/language-provider"
 
 type Message = {
   id: string
@@ -20,6 +21,9 @@ type Message = {
   bundle_id?: string | null
   mime_type?: string | null
   current_project?: string | null
+    original_content?: string | null
+  original_language?: "en" | "es" | string | null
+  translated_content?: Record<string, string> | null
 }
 
 interface MessageBubbleProps {
@@ -309,6 +313,7 @@ export function MessageBubble({
   senderName,
 }: MessageBubbleProps) {
   const firstMessage = messages[0]
+    const { language } = useLanguage()
 
   const [receiptTotalPrice, setReceiptTotalPrice] = useState<number | null>(null)
   const [receiptCategory, setReceiptCategory] = useState<string | null>(null)
@@ -336,6 +341,20 @@ const receiptFiles = useMemo(
   () => receiptMessages.filter((m) => !!m.file_url),
   [receiptMessages],
 )
+
+  const getDisplayContent = (message: Message) => {
+    const translatedContent = message.translated_content
+
+    if (
+      translatedContent &&
+      typeof translatedContent === "object" &&
+      translatedContent[language]
+    ) {
+      return translatedContent[language]
+    }
+
+    return message.original_content || message.content
+  }
 
 const attachmentMessages = useMemo(
   () =>
@@ -514,7 +533,7 @@ const receiptText = useMemo(
     key={`${msg.id}-${index}`}
     className="text-sm leading-6 break-words [overflow-wrap:anywhere]"
   >
-                {msg.content}
+                {getDisplayContent(msg)}
               </p>
             ))}
 
@@ -624,7 +643,7 @@ const receiptText = useMemo(
 
                 {receiptText.map((msg) => (
                   <p key={msg.id} className="text-sm leading-6 break-words">
-                    {msg.content}
+                    {getDisplayContent(msg)}
                   </p>
                 ))}
 
@@ -641,7 +660,7 @@ const receiptText = useMemo(
 
                 {timecardText.map((msg) => (
                   <p key={msg.id} className="text-sm leading-6 break-words">
-                    {msg.content}
+                    {getDisplayContent(msg)}
                   </p>
                 ))}
 
@@ -716,7 +735,7 @@ const receiptText = useMemo(
 
                 {mediaText.map((msg) => (
                   <p key={msg.id} className="text-sm leading-6 break-words">
-                    {msg.content}
+                    {getDisplayContent(msg)}
                   </p>
                 ))}
 
