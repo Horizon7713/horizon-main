@@ -13,6 +13,7 @@ import { messageCache } from "@/lib/message-cache"
 import { offlineQueue } from "@/lib/offline-queue"
 import { OfflineIndicator } from "./offline-indicator"
 import { supabase } from "@/lib/supabase/client"
+import { LanguageToggle } from "@/components/language/language-toggle"
 
 type User = {
   id: string
@@ -478,15 +479,23 @@ console.log("[v0] Realtime new message details", {
 >
                 <div className="flex h-full min-h-0 flex-col bg-zinc-950">
                   {!showGallery && (
-                    <div className="border-b border-zinc-800 bg-zinc-950">
-                      <MessageHeader
-                        selectedUser={selectedUser}
-                        onHeaderClick={handleToggleGallery}
-                        onBack={handleBackToList}
-                        showBackButton={showMobileMessages && !hasSingleContact}
-                      />
-                    </div>
-                  )}
+  <div className="border-b border-zinc-800 bg-zinc-950">
+    <div className="flex items-center gap-2 px-2 py-2 sm:px-3">
+      <div className="min-w-0 flex-1">
+        <MessageHeader
+          selectedUser={selectedUser}
+          onHeaderClick={handleToggleGallery}
+          onBack={handleBackToList}
+          showBackButton={showMobileMessages && !hasSingleContact}
+        />
+      </div>
+
+      <div className="shrink-0">
+        <LanguageToggle />
+      </div>
+    </div>
+  </div>
+)}
 
                   <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div
