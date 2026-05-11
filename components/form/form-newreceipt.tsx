@@ -2,20 +2,30 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  AlertTriangle,
+  Camera,
+  CheckCircle2,
+  DollarSign,
+  File,
+  Loader2,
+  Plus,
+  Receipt,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { File, X, Upload, Camera, AlertTriangle, Edit3 } from 'lucide-react'
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { supabase } from "@/lib/supabase/client"
 
 interface Project {
@@ -28,14 +38,25 @@ interface Project {
 
 interface ReceiptItem {
   name: string
-  quantity?: number
-  price?: number
+  quantity?: number | null
+  price?: number | null
 }
 
 interface ReceiptQualityAssessment {
   confidencePercentage: number
   imageQuality: "good" | "poor" | "unreadable"
   uncertainFields?: string[]
+}
+
+interface R2SignResponse {
+  uploadUrl?: string
+  signedUrl?: string
+  publicUrl?: string
+  fileUrl?: string
+  url?: string
+  key?: string
+  objectKey?: string
+  contentType?: string
 }
 
 interface FormNewReceiptProps {
@@ -57,6 +78,57 @@ interface FormNewReceiptProps {
   }
 }
 
+const RECEIPT_CATEGORIES = [
+  { value: "lumber", label: "Lumber" },
+  { value: "concrete", label: "Concrete" },
+  { value: "finish", label: "Finish" },
+  { value: "gas", label: "Gas" },
+  { value: "framing", label: "Framing" },
+  { value: "small_tool", label: "Small Tool" },
+  { value: "equipment", label: "Equipment" },
+  { value: "plumbing", label: "Plumbing" },
+  { value: "electrical", label: "Electrical" },
+  { value: "other", label: "Other" },
+]
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  }).format(Number.isFinite(value) ? value : 0)
+}
+
+function formatCategory(value: string) {
+  const category = RECEIPT_CATEGORIES.find((item) => item.value === value)
+
+  if (category) return category.label
+  if (!value) return "No category"
+
+  return value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " ")
+}
+
+function normalizeReceiptItems(items: ReceiptItem[]) {
+  return items
+    .map((item) => ({
+      name: String(item.name || "").trim(),
+      quantity: item.quantity ? Number(item.quantity) : 1,
+      price: item.price ? Number(item.price) : 0,
+    }))
+    .filter((item) => item.name || item.price > 0)
+}
+
+function getPublicR2Url(signResult: R2SignResponse) {
+  return signResult.publicUrl || signResult.fileUrl || signResult.url || ""
+}
+
+function getUploadUrl(signResult: R2SignResponse) {
+  return signResult.uploadUrl || signResult.signedUrl || ""
+}
+
+function getUploadMimeType(signResult: R2SignResponse, fallback: string) {
+  return signResult.contentType || fallback || "application/octet-stream"
+}
+
 export function FormNewReceipt({
   userId,
   receiverId,
@@ -67,9 +139,9 @@ export function FormNewReceipt({
   initialData,
 }: FormNewReceiptProps) {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [selectedProject, setSelectedProject] = useState<string>("")
-  const [projectName, setProjectName] = useState<string>("")
-  const [category, setCategory] = useState<string>("")
+  const [selectedProject, setSelectedProject] = useState("")
+  const [projectName, setProjectName] = useState("")
+  const [category, setCategory] = useState("")
   const [vendorName, setVendorName] = useState("")
   const [notes, setNotes] = useState("")
   const [totalPrice, setTotalPrice] = useState("")
@@ -80,12 +152,44 @@ export function FormNewReceipt({
   const [loadingProjects, setLoadingProjects] = useState(true)
   const [analyzingReceipt, setAnalyzingReceipt] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showManualInputDialog, setShowManualInputDialog] = useState(false)
-  const [manualReceiptImage, setManualReceiptImage] = useState<File | null>(null)
-  const [manualReceiptImagePreview, setManualReceiptImagePreview] = useState<string | null>(null)
+
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
-  const manualImageInputRef = useRef<HTMLInputElement>(null)
+
+  const itemTotal = useMemo(() => {
+    return itemsPurchased.reduce((sum, item) => {
+      const quantity = Number(item.quantity || 1)
+      const price = Number(item.price || 0)
+
+      return sum + quantity * price
+    }, 0)
+  }, [itemsPurchased])
+
+  const canSubmit = useMemo(() => {
+    if (viewMode || loading || analyzingReceipt) return false
+    if (!selectedProject) return false
+
+    const parsedTotal = Number.parseFloat(totalPrice)
+
+    if (!Number.isFinite(parsedTotal) || parsedTotal <= 0) return false
+
+    return (
+      selectedFiles.length > 0 ||
+      vendorName.trim().length > 0 ||
+      notes.trim().length > 0 ||
+      normalizeReceiptItems(itemsPurchased).length > 0
+    )
+  }, [
+    analyzingReceipt,
+    itemsPurchased,
+    loading,
+    notes,
+    selectedFiles.length,
+    selectedProject,
+    totalPrice,
+    vendorName,
+    viewMode,
+  ])
 
   useEffect(() => {
     if (viewMode) {
@@ -93,32 +197,32 @@ export function FormNewReceipt({
       return
     }
 
-    const fetchUserProjects = async () => {
+    async function fetchUserProjects() {
       try {
-        // Get current user's profile ID
-        const { data: userProfile } = await supabase.from("users").select("id").eq("auth_id", userId).single()
+        const { data: userProfile, error: userError } = await supabase
+          .from("users")
+          .select("id")
+          .eq("auth_id", userId)
+          .single()
 
-        if (!userProfile) {
-          console.error("[v0] User profile not found")
-          setLoadingProjects(false)
+        if (userError || !userProfile) {
+          console.error("[FormNewReceipt] User profile not found:", userError)
           return
         }
 
-        // Fetch projects where user is assigned
-        const { data, error } = await supabase
+        const { data, error: projectsError } = await supabase
           .from("projects")
           .select("id, name, status, company, current_budget")
           .eq("status", "active")
           .contains("users", [userProfile.id])
           .order("name")
 
-        if (error) {
-          console.error("[v0] Error fetching projects:", error)
-        } else {
-          setProjects(data || [])
+        if (projectsError) {
+          console.error("[FormNewReceipt] Error fetching projects:", projectsError)
+          return
         }
-      } catch (err) {
-        console.error("[v0] Error fetching projects:", err)
+
+        setProjects(data || [])
       } finally {
         setLoadingProjects(false)
       }
@@ -128,213 +232,99 @@ export function FormNewReceipt({
   }, [userId, viewMode])
 
   useEffect(() => {
-    if (projects.length > 0 && !selectedProject) {
+    if (!selectedProject && projects.length > 0) {
       setSelectedProject(projects[0].id)
     }
   }, [projects, selectedProject])
 
   useEffect(() => {
-    if (viewMode && initialData) {
-      setTotalPrice(initialData.totalPrice)
-      setSelectedProject(initialData.project)
-      setProjectName(initialData.projectName || "Unknown Project")
-      setNotes(initialData.notes)
-      setItemsPurchased(initialData.items)
-      setCategory(initialData.category || "")
-      setVendorName(initialData.vendorName || "")
-    }
-  }, [viewMode, initialData])
+    if (!viewMode || !initialData) return
 
-  const handleFileClick = () => {
-    fileInputRef.current?.click()
-  }
+    setTotalPrice(initialData.totalPrice)
+    setSelectedProject(initialData.project)
+    setProjectName(initialData.projectName || "Unknown Project")
+    setNotes(initialData.notes || "")
+    setItemsPurchased(initialData.items || [])
+    setCategory(initialData.category || "")
+    setVendorName(initialData.vendorName || "")
+  }, [initialData, viewMode])
 
-  const handleCameraClick = () => {
-    cameraInputRef.current?.click()
-  }
-
-  const handleManualImageClick = () => {
-    manualImageInputRef.current?.click()
-  }
-
-  const handleManualImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setManualReceiptImage(file)
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setManualReceiptImagePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length > 0) {
-      setSelectedFiles((prev) => [...prev, ...files])
-
-      const firstImageFile = files.find((file) => file.type.startsWith("image/"))
-      if (firstImageFile && !totalPrice) {
-        analyzeReceiptImage(firstImageFile)
-      }
-    }
-  }
-
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!selectedProject) {
-      setError("Please select a project")
-      return
-    }
-
-    if (!totalPrice || Number.parseFloat(totalPrice) <= 0) {
-      setError("Please enter a valid total price")
-      return
-    }
-
-    setLoading(true)
+  const resetForm = () => {
+    setSelectedFiles([])
+    setSelectedProject(projects[0]?.id || "")
+    setProjectName("")
+    setCategory("")
+    setVendorName("")
+    setNotes("")
+    setTotalPrice("")
+    setItemsPurchased([])
+    setQualityAssessment(null)
     setError(null)
 
-    try {
-      const bundleId = crypto.randomUUID()
-
-      const fileData: Array<{ url: string; mimeType: string }> = []
-      
-      // Collect all files to upload (selected files + manual image if exists)
-      const filesToUpload: File[] = [...selectedFiles]
-      if (manualReceiptImage) {
-        filesToUpload.push(manualReceiptImage)
-      }
-
-      // Only process files if they exist
-      if (filesToUpload.length > 0) {
-        for (const file of filesToUpload) {
-          const uploadResponse = await fetch("/api/upload", {
-  method: "POST",
-  headers: {
-    "Content-Type": file.type || "application/octet-stream",
-    "x-filename": encodeURIComponent(file.name),
-  },
-  body: file,
-})
-
-          if (!uploadResponse.ok) {
-            console.error(`[v0] Failed to upload file: ${file.name}`)
-            continue
-          }
-
-          const uploadResult = await uploadResponse.json()
-          fileData.push({
-            url: uploadResult.url,
-            mimeType: uploadResult.contentType,
-          })
-        }
-
-        if (fileData.length === 0) {
-  setError("Failed to upload files")
-  setLoading(false)
-  return
-}
-      }
-
-      const formData = new FormData()
-      formData.append("content", notes.trim())
-      formData.append("fileData", JSON.stringify(fileData))
-      formData.append("bundleId", bundleId)
-      formData.append("userId", userId)
-      formData.append("receiverId", receiverId)
-      formData.append("currentProject", selectedProject)
-      formData.append("messageType", "receipt")
-      formData.append("totalPrice", totalPrice)
-      formData.append("itemsPurchased", JSON.stringify(itemsPurchased))
-      formData.append("category", category)
-      formData.append("vendorName", vendorName)
-
-      const result = await sendMessageAction(formData)
-
-      if (result.error) {
-        setError(result.error)
-        } else {
-        try {
-          const receiptTotal = Number.parseFloat(totalPrice)
-
-          console.log("[v0] Updating project budget for project:", selectedProject)
-          console.log("[v0] Subtracting receipt total:", receiptTotal)
-
-          // Get current budget first
-          const { data: projectData, error: fetchError } = await supabase
-            .from("projects")
-            .select("current_budget")
-            .eq("id", selectedProject)
-            .single()
-
-          if (fetchError) {
-            console.error("[v0] Error fetching project budget:", fetchError)
-          } else if (projectData) {
-            const currentBudget = projectData.current_budget || 0
-            const newBudget = currentBudget - receiptTotal
-
-            console.log("[v0] Current budget:", currentBudget)
-            console.log("[v0] New budget:", newBudget)
-
-            // Update the budget
-            const { error: updateError } = await supabase
-              .from("projects")
-              .update({ current_budget: newBudget })
-              .eq("id", selectedProject)
-
-            if (updateError) {
-              console.error("[v0] Error updating project budget:", updateError)
-            } else {
-              console.log("[v0] Successfully updated project budget")
-            }
-          }
-        } catch (budgetError) {
-          console.error("[v0] Error updating project budget:", budgetError)
-          // Don't fail the entire submission if budget update fails
-        }
-
-        setSelectedFiles([])
-        setSelectedProject("")
-        setProjectName("")
-        setCategory("")
-        setVendorName("")
-        setNotes("")
-        setTotalPrice("")
-        setItemsPurchased([])
-        setManualReceiptImage(null)
-        setManualReceiptImagePreview(null)
-        onSuccess?.()
-      }
-    } catch (err) {
-      console.error("[v0] Error submitting receipt:", err)
-      setError("An error occurred. Please try again.")
-    } finally {
-      setLoading(false)
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
 
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
+
       reader.onload = () => {
         const base64 = reader.result as string
-        // Remove the data URL prefix (e.g., "data:image/jpeg;base64,")
-        const base64Data = base64.split(",")[1]
-        resolve(base64Data)
+        resolve(base64.split(",")[1] || "")
       }
+
       reader.onerror = reject
       reader.readAsDataURL(file)
     })
+  }
+
+  const getOptimizedImageBase64 = async (file: File): Promise<string> => {
+  if (!file.type.startsWith("image/")) {
+    return fileToBase64(file)
+  }
+
+  const maxSize = 1600
+  const quality = 0.82
+  const imageUrl = URL.createObjectURL(file)
+
+  try {
+    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = reject
+      img.src = imageUrl
+    })
+
+    const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+    const width = Math.round(image.width * scale)
+    const height = Math.round(image.height * scale)
+
+    const canvas = document.createElement("canvas")
+    canvas.width = width
+    canvas.height = height
+
+    const context = canvas.getContext("2d")
+
+    if (!context) {
+      return fileToBase64(file)
+    }
+
+    context.drawImage(image, 0, 0, width, height)
+
+    const dataUrl = canvas.toDataURL("image/jpeg", quality)
+
+    return dataUrl.split(",")[1] || ""
+  } finally {
+    URL.revokeObjectURL(imageUrl)
+  }
+}
+
+  const clearFailedReceiptFile = () => {
+    setSelectedFiles([])
+
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
 
   const analyzeReceiptImage = async (file: File) => {
@@ -345,776 +335,788 @@ export function FormNewReceipt({
       setTotalPrice("")
       setItemsPurchased([])
 
-      console.log("[v0] Converting receipt image to base64...")
-      const base64 = await fileToBase64(file)
+      if (!file.type.startsWith("image/")) {
+        setError("Only receipt images can be analyzed automatically. PDFs can still be uploaded and entered manually.")
+        return
+      }
 
-      // Step 1: Extract text from image using OCR (client-side)
-      
-      console.log("[v0] Starting OCR extraction from receipt image...")
-let ocrText = ""
+      const base64 = await getOptimizedImageBase64(file)
 
-try {
-  const Tesseract = (await import("tesseract.js")).default
-  const worker = await Tesseract.createWorker("eng")
-
-  const img = new Image()
-  img.crossOrigin = "anonymous"
-  img.src = `data:${file.type};base64,${base64}`
-
-  await new Promise((resolve, reject) => {
-    img.onload = resolve
-    img.onerror = reject
-  })
-
-  const ocrResult = await worker.recognize(img)
-  ocrText = ocrResult.data.text
-
-  console.log("[v0] OCR extraction complete. Text length:", ocrText.length)
-  console.log("[v0] OCR confidence:", ocrResult.data.confidence)
-
-  await worker.terminate()
-} catch (ocrError) {
-  console.error("[v0] OCR extraction failed:", ocrError)
-
-  throw new Error(
-    ocrError instanceof Error
-      ? `OCR failed: ${ocrError.message}`
-      : "OCR failed for an unknown reason."
-  )
-}
-
-if (!ocrText.trim()) {
-  throw new Error("No readable text was found on the receipt.")
-}
-
-console.log("[v0] Sending OCR text to ChatGPT for analysis...")
-
-const response = await fetch("/api/analyze-receipt", {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    method: "analyzeOCR",
-    ocrText,
-  }),
-})
+      const response = await fetch("/api/analyze-receipt-fast", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageBase64: base64,
+          mimeType: "image/jpeg",
+        }),
+      })
 
       const result = await response.json()
 
-      console.log("[v0] Receipt analysis response status:", response.status)
-console.log("[v0] Receipt analysis parsed result:", result)
-
-      if (result.success && result.data) {
-        const confidencePercentage = result.data.confidencePercentage || 0
-
-        console.log("[v0] Receipt analysis confidence:", confidencePercentage + "%")
-
-        // Store quality assessment
-        if (result.data.confidencePercentage !== undefined && result.data.imageQuality) {
-          setQualityAssessment({
-            confidencePercentage: result.data.confidencePercentage,
-            imageQuality: result.data.imageQuality,
-            uncertainFields: result.data.uncertainFields,
-          })
-        }
-
-        if (confidencePercentage >= 76) {
-          if (result.data.total_cost) {
-            console.log("[v0] Receipt analysis successful, total cost:", result.data.total_cost)
-            setTotalPrice(result.data.total_cost.toString())
-          }
-
-          if (result.data.items && Array.isArray(result.data.items)) {
-            console.log("[v0] Extracted items:", result.data.items)
-            setItemsPurchased(result.data.items)
-          }
-
-          if (result.data.category) {
-            console.log("[v0] Extracted category:", result.data.category)
-            setCategory(result.data.category)
-          }
-
-          if (result.data.vendor_name || result.data.merchant) {
-            const vendor = result.data.vendor_name || result.data.merchant
-            console.log("[v0] Extracted vendor name:", vendor)
-            setVendorName(vendor)
-          }
-
-          if (result.data.project_name) {
-            console.log("[v0] Extracted project name:", result.data.project_name)
-            setProjectName(result.data.project_name)
-          }
-        } else {
-          console.log("[v0] Confidence below 76%, not populating form")
-          setError(
-            `Receipt image quality is insufficient (${confidencePercentage}% confidence). Please take a clearer photo with better lighting and focus.`,
-          )
-          setSelectedFiles([])
-          if (fileInputRef.current) {
-            fileInputRef.current.value = ""
-          }
-          if (cameraInputRef.current) {
-            cameraInputRef.current.value = ""
-          }
-        }
-            } else {
-        console.log("[v0] Receipt analysis raw result:", result)
-        console.log("[v0] Could not extract data from receipt")
-
-        const backendError =
-          result && typeof result === "object" && "error" in result
-            ? String(result.error)
-            : "Could not automatically extract data from receipt."
-
-        setError(backendError)
-        setSelectedFiles([])
-        if (fileInputRef.current) {
-          fileInputRef.current.value = ""
-        }
+      if (!result.success || !result.data) {
+        setError(String(result.error || "Could not automatically extract data from receipt."))
+        clearFailedReceiptFile()
+        return
       }
 
-          } catch (err) {
-      console.error("[v0] Error analyzing receipt:", err)
-      const errorMessage = err instanceof Error ? err.message : "Failed to analyze receipt"
-      setError(`Error: ${errorMessage}. Please try again.`)
-      setSelectedFiles([])
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ""
+      const confidencePercentage = Number(result.data.confidencePercentage || 0)
+      const imageQuality = result.data.imageQuality || "poor"
+
+      setQualityAssessment({
+        confidencePercentage,
+        imageQuality,
+        uncertainFields: Array.isArray(result.data.uncertainFields) ? result.data.uncertainFields : [],
+      })
+
+      if (imageQuality === "unreadable" || confidencePercentage < 60) {
+        setError(
+          `Receipt image quality is too low (${confidencePercentage}% confidence). Please take a clearer photo with better lighting and focus.`,
+        )
+        clearFailedReceiptFile()
+        return
       }
+
+      if (result.data.total_cost !== null && result.data.total_cost !== undefined) {
+        setTotalPrice(String(result.data.total_cost))
+      }
+
+      if (Array.isArray(result.data.items)) {
+        setItemsPurchased(
+          result.data.items.map((item: ReceiptItem) => ({
+            name: item.name || "",
+            quantity: item.quantity || undefined,
+            price: item.price || undefined,
+          })),
+        )
+      }
+
+      if (result.data.category) {
+        setCategory(result.data.category)
+      }
+
+      if (result.data.vendor_name || result.data.merchant) {
+        setVendorName(result.data.vendor_name || result.data.merchant)
+      }
+
+      if (result.data.project_name) {
+        setProjectName(result.data.project_name)
+      }
+    } catch (err) {
+      console.error("[FormNewReceipt] Error analyzing receipt:", err)
+      setError(err instanceof Error ? err.message : "Failed to analyze receipt. Please try again.")
+      clearFailedReceiptFile()
     } finally {
       setAnalyzingReceipt(false)
     }
   }
 
-  // Handlers for editing item fields
-  const handleItemNameChange = (index: number, value: string) => {
-    setItemsPurchased((prev) => {
-      const updated = [...prev]
-      updated[index] = { ...updated[index], name: value }
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+
+    if (files.length === 0) return
+
+    setError(null)
+    setSelectedFiles((previous) => [...previous, ...files])
+
+    const firstImageFile = files.find((file) => file.type.startsWith("image/"))
+
+    if (firstImageFile) {
+      analyzeReceiptImage(firstImageFile)
+    }
+  }
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
+
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (cameraInputRef.current) cameraInputRef.current.value = ""
+  }
+
+  const addItem = () => {
+    setItemsPurchased((previous) => [
+      ...previous,
+      {
+        name: "",
+        quantity: 1,
+        price: undefined,
+      },
+    ])
+  }
+
+  const updateItem = (index: number, patch: Partial<ReceiptItem>) => {
+    setItemsPurchased((previous) => {
+      const updated = [...previous]
+
+      updated[index] = {
+        ...updated[index],
+        ...patch,
+      }
+
       return updated
     })
   }
 
-  const handleItemQuantityChange = (index: number, value: string) => {
-    setItemsPurchased((prev) => {
-      const updated = [...prev]
-      updated[index] = { ...updated[index], quantity: value ? Number(value) : undefined }
-      return updated
-    })
+  const removeItem = (index: number) => {
+    setItemsPurchased((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
   }
 
-  const handleItemPriceChange = (index: number, value: string) => {
-    setItemsPurchased((prev) => {
-      const updated = [...prev]
-      updated[index] = { ...updated[index], price: value ? Number.parseFloat(value) : undefined }
-      return updated
+  const getR2SignedUpload = async (file: File) => {
+    const response = await fetch("/api/uploads/r2/sign", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+        mimeType: file.type || "application/octet-stream",
+        folder: "receipts",
+        type: "receipt",
+        projectId: selectedProject || null,
+      }),
     })
+
+    const result = await response.json()
+
+    if (!response.ok || result.error) {
+      throw new Error(result.error || `Failed to create Cloudflare R2 upload URL for ${file.name}`)
+    }
+
+    const uploadUrl = getUploadUrl(result)
+
+    if (!uploadUrl) {
+      throw new Error("Cloudflare R2 signing response did not include uploadUrl or signedUrl.")
+    }
+
+    const publicUrl = getPublicR2Url(result)
+
+    if (!publicUrl) {
+      throw new Error("Cloudflare R2 signing response did not include publicUrl, fileUrl, or url.")
+    }
+
+    return result as R2SignResponse
   }
 
-  const handleRemoveItem = (index: number) => {
-    setItemsPurchased((prev) => prev.filter((_, i) => i !== index))
+  const uploadReceiptFilesToR2 = async () => {
+    const uploadedFiles: Array<{ url: string; mimeType: string }> = []
+
+    for (const file of selectedFiles) {
+      const signResult = await getR2SignedUpload(file)
+      const uploadUrl = getUploadUrl(signResult)
+      const publicUrl = getPublicR2Url(signResult)
+      const contentType = file.type || "application/octet-stream"
+
+      const uploadResponse = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": contentType,
+        },
+        body: file,
+      })
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Failed to upload ${file.name} to Cloudflare R2.`)
+      }
+
+      uploadedFiles.push({
+        url: publicUrl,
+        mimeType: getUploadMimeType(signResult, contentType),
+      })
+    }
+
+    return uploadedFiles
+  }
+
+  const updateProjectBudget = async (receiptTotal: number) => {
+    try {
+      const { data: projectData, error: fetchError } = await supabase
+        .from("projects")
+        .select("current_budget")
+        .eq("id", selectedProject)
+        .single()
+
+      if (fetchError || !projectData) {
+        console.error("[FormNewReceipt] Error fetching project budget:", fetchError)
+        return
+      }
+
+      const currentBudget = Number(projectData.current_budget || 0)
+      const newBudget = currentBudget - receiptTotal
+
+      const { error: updateError } = await supabase
+        .from("projects")
+        .update({ current_budget: newBudget })
+        .eq("id", selectedProject)
+
+      if (updateError) {
+        console.error("[FormNewReceipt] Error updating project budget:", updateError)
+      }
+    } catch (error) {
+      console.error("[FormNewReceipt] Error updating project budget:", error)
+    }
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!selectedProject) {
+      setError("Please select a project.")
+      return
+    }
+
+    const receiptTotal = Number.parseFloat(totalPrice)
+
+    if (!Number.isFinite(receiptTotal) || receiptTotal <= 0) {
+      setError("Please enter a valid total price.")
+      return
+    }
+
+    const cleanItems = normalizeReceiptItems(itemsPurchased)
+
+    if (selectedFiles.length === 0 && !vendorName.trim() && !notes.trim() && cleanItems.length === 0) {
+      setError("Please upload a receipt, enter a vendor, add notes, or add at least one item.")
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      const bundleId = crypto.randomUUID()
+      const uploadedFileData = await uploadReceiptFilesToR2()
+
+      const formData = new FormData()
+      formData.append("content", notes.trim())
+      formData.append("fileData", JSON.stringify(uploadedFileData))
+      formData.append("bundleId", bundleId)
+      formData.append("userId", userId)
+      formData.append("receiverId", receiverId)
+      formData.append("currentProject", selectedProject)
+      formData.append("messageType", "receipt")
+      formData.append("totalPrice", receiptTotal.toFixed(2))
+      formData.append("itemsPurchased", JSON.stringify(cleanItems))
+      formData.append("category", category)
+      formData.append("vendorName", vendorName.trim())
+
+      const result = await sendMessageAction(formData)
+
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+
+      await updateProjectBudget(receiptTotal)
+
+      resetForm()
+      onSuccess?.()
+    } catch (err) {
+      console.error("[FormNewReceipt] Error submitting receipt:", err)
+      setError(err instanceof Error ? err.message : "An error occurred. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (viewMode) {
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-4">
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
+              <Receipt className="h-4 w-4 text-zinc-300" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
+              <p className="mt-1 text-xs text-zinc-500">Review saved receipt information.</p>
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Detail label="Project" value={projectName || "No project"} />
+            <Detail label="Total" value={formatMoney(Number.parseFloat(totalPrice || "0"))} />
+            <Detail label="Category" value={formatCategory(category)} />
+            <Detail label="Vendor" value={vendorName || "No vendor"} />
+          </div>
+
+          {notes ? (
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-3">
+              <div className="text-xs font-medium text-zinc-500">Message</div>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">{notes}</p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
+            {itemTotal > 0 ? (
+              <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span>
+            ) : null}
+          </div>
+
+          {itemsPurchased.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-black p-4 text-center text-sm text-zinc-500">
+              No receipt items saved.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {itemsPurchased.map((item, index) => (
+                <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
+                  <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    Qty {item.quantity || 1} • {formatMoney(Number(item.price || 0))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {initialData?.files?.length ? (
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+            <h3 className="mb-3 text-sm font-semibold text-zinc-100">Receipt files</h3>
+            <div className="space-y-2">
+              {initialData.files.map((file, index) => {
+                if (!file.url) return null
+
+                const isImage = file.mimeType?.startsWith("image/")
+                const fileName = file.url.split("/").pop() || "receipt-file"
+
+                return (
+                  <a
+                    key={`${file.url}-${index}`}
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={fileName}
+                    className="block overflow-hidden rounded-xl border border-zinc-800 bg-black text-sm text-zinc-300 hover:bg-zinc-900"
+                  >
+                    {isImage ? (
+                      <img src={file.url} alt="Receipt" className="max-h-72 w-full object-contain" />
+                    ) : (
+                      <div className="flex items-center gap-2 p-3">
+                        <File className="h-4 w-4" />
+                        <span className="min-w-0 flex-1 truncate">{fileName}</span>
+                        <span className="text-xs text-zinc-500">Open</span>
+                      </div>
+                    )}
+                  </a>
+                )
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        <div className="flex justify-end">
+          <Button type="button" onClick={onCancel}>
+            Close
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
-    <div className="mx-auto w-full max-w-2xl">
+    <div className="mx-auto w-full max-w-3xl">
       <form onSubmit={handleSubmit} className="space-y-4">
-        {error && (
-          <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/20 text-destructive text-xs">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="size-3.5 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="font-semibold text-xs">Unable to Process Receipt</p>
-                <p className="text-xs mt-0.5">{error}</p>
-              </div>
+        {error ? <AlertCard title="Receipt issue" message={error} tone="error" /> : null}
+
+        {analyzingReceipt ? (
+          <AlertCard
+            title="Analyzing receipt"
+            message="Reading receipt image with faster server-side AI extraction..."
+            tone="info"
+            loading
+          />
+        ) : null}
+
+        {qualityAssessment && qualityAssessment.confidencePercentage >= 60 ? (
+          <AlertCard
+            title="Receipt analyzed"
+            message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence.`}
+            tone="success"
+          />
+        ) : null}
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <div className="mb-3 flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
+              <Receipt className="h-4 w-4 text-zinc-300" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">Receipt capture</h3>
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+                Upload a receipt or take a photo. Images are resized for fast AI extraction, then saved to Cloudflare R2.
+              </p>
             </div>
           </div>
-        )}
 
-        {analyzingReceipt && (
-          <div className="p-2 rounded-lg bg-primary/10 border border-primary/20 text-primary text-xs">
-            Analyzing receipt with AI...
-          </div>
-        )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*,application/pdf"
+            className="hidden"
+            onChange={handleFileChange}
+            disabled={loading}
+          />
 
-        {qualityAssessment && qualityAssessment.confidencePercentage < 76 && (
-          <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 space-y-1">
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="size-3.5 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="font-semibold text-xs">Low Confidence: {qualityAssessment.confidencePercentage}%</p>
-                <p className="text-xs mt-1">
-                  The AI confidence is below the required 76% threshold. Please retake with better lighting and focus.
-                </p>
-                {qualityAssessment.uncertainFields && qualityAssessment.uncertainFields.length > 0 && (
-                  <p className="text-xs mt-1">Uncertain: {qualityAssessment.uncertainFields.join(", ")}</p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileChange}
+            disabled={loading}
+          />
 
-        {qualityAssessment && qualityAssessment.confidencePercentage >= 76 && (
-          <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400 text-xs">
-            ✓ Receipt analyzed successfully with {qualityAssessment.confidencePercentage}% confidence
-          </div>
-        )}
-
-        {!viewMode && (
-          <div className="space-y-2">
-            <Label className="text-xs font-medium">Receipt Files/Images</Label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept="image/*,application/pdf"
-              className="hidden"
-              onChange={handleFileChange}
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900"
+              onClick={() => fileInputRef.current?.click()}
               disabled={loading}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleFileChange}
+            >
+              <Upload className="mr-2 h-4 w-4" />
+              Upload receipt
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900"
+              onClick={() => cameraInputRef.current?.click()}
               disabled={loading}
-            />
-
-            <div className="flex gap-2 flex-col sm:flex-row">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex-1 bg-transparent text-xs h-9"
-                onClick={handleFileClick}
-                disabled={loading}
-              >
-                <Upload className="mr-1 size-3.5" />
-                Upload
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex-1 bg-transparent text-xs h-9"
-                onClick={handleCameraClick}
-                disabled={loading}
-              >
-                <Camera className="mr-1 size-3.5" />
-                Photo
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="flex-1 bg-transparent text-xs h-9"
-                onClick={() => setShowManualInputDialog(true)}
-                disabled={loading}
-              >
-                <Edit3 className="mr-1 size-3.5" />
-                Manual
-              </Button>
-            </div>
-
-            {selectedFiles.length > 0 && (
-              <div className="space-y-1 mt-2">
-                {selectedFiles.map((file, index) => (
-                  <div key={index} className="flex items-center gap-2 p-1.5 bg-muted rounded text-xs">
-                    <File className="size-3 text-muted-foreground flex-shrink-0" />
-                    <span className="flex-1 truncate">{file.name}</span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-5 h-5 w-5"
-                      onClick={() => handleRemoveFile(index)}
-                      disabled={loading}
-                    >
-                      <X className="size-2.5" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
+            >
+              <Camera className="mr-2 h-4 w-4" />
+              Take photo
+            </Button>
           </div>
-        )}
 
-      {viewMode && initialData && initialData.files.length > 0 && (
-  <div className="space-y-2">
-    <Label className="text-xs font-medium">Receipt Files</Label>
-    <div className="space-y-2">
-      {initialData.files.map((file, index) => {
-        const isImage = file.mimeType?.startsWith("image/")
-        const isPdf = file.mimeType === "application/pdf"
-
-        if (isImage && file.url) {
-          return (
-            <a
-              key={index}
-              href={file.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-              className="block overflow-hidden rounded-lg border border-input bg-muted/50"
-            >
-              <img
-                src={file.url}
-                alt="Receipt"
-                className="max-h-56 w-full object-contain"
-              />
-              <div className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
-                Tap to open or download
-              </div>
-            </a>
-          )
-        }
-
-        if (file.url) {
-          const fileName = file.url.split("/").pop() || "file"
-
-          return (
-            <a
-              key={index}
-              href={file.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              download={fileName}
-              className="flex items-center gap-2 rounded border border-input bg-muted px-3 py-2 text-xs hover:underline"
-            >
-              <File className="size-3.5" />
-              <span className="truncate flex-1">
-                {isPdf ? "Receipt PDF" : fileName}
-              </span>
-              <span className="text-muted-foreground">Open</span>
-            </a>
-          )
-        }
-
-        return null
-      })}
-    </div>
-  </div>
-)}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="project" className="text-xs font-medium">Project</Label>
-          {viewMode ? (
-            <div className="w-full px-2 py-2 border border-input rounded text-xs bg-muted h-9 flex items-center">
-              {projectName || 'No project'}
-            </div>
-          ) : (
-            <Select
-              value={selectedProject}
-              onValueChange={setSelectedProject}
-              disabled={loading || loadingProjects || viewMode}
-            >
-              <SelectTrigger id="project" className="w-full h-9 text-xs">
-                <SelectValue placeholder={loadingProjects ? "Loading..." : "Select project"} />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((project) => (
-                  <SelectItem key={project.id} value={project.id} className="text-xs">
-                    {project.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="totalPrice" className="text-xs font-medium">Total Price</Label>
-          <div className="relative">
-            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-            <input
-              id="totalPrice"
-              type="number"
-              step="0.01"
-              min="0"
-              value={totalPrice}
-              onChange={(e) => setTotalPrice(e.target.value)}
-              placeholder="0.00"
-              className="w-full h-9 pl-6 pr-2 text-xs border border-input rounded bg-background"
-              disabled={loading || analyzingReceipt || viewMode}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="space-y-1.5">
-          <Label htmlFor="category" className="text-xs font-medium">Category</Label>
-          {viewMode ? (
-            <div className="w-full px-2 py-2 border border-input rounded text-xs bg-muted h-9 flex items-center">
-              {category ? category.charAt(0).toUpperCase() + category.slice(1).replace('_', ' ') : 'No category'}
-            </div>
-          ) : (
-            <Select
-              value={category}
-              onValueChange={setCategory}
-              disabled={loading || viewMode}
-            >
-              <SelectTrigger id="category" className="w-full h-9 text-xs">
-                <SelectValue placeholder="Select category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="lumber" className="text-xs">Lumber</SelectItem>
-                <SelectItem value="concrete" className="text-xs">Concrete</SelectItem>
-                <SelectItem value="finish" className="text-xs">Finish</SelectItem>
-                <SelectItem value="gas" className="text-xs">Gas</SelectItem>
-                <SelectItem value="framing" className="text-xs">Framing</SelectItem>
-                <SelectItem value="small_tool" className="text-xs">Small Tool</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="vendorName" className="text-xs font-medium">Vendor Name</Label>
-          {viewMode ? (
-            <div className="w-full px-2 py-2 border border-input rounded text-xs bg-muted h-9 flex items-center">
-              {vendorName || 'No vendor name'}
-            </div>
-          ) : (
-            <input
-              id="vendorName"
-              type="text"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-              placeholder="e.g., Home Depot"
-              className="w-full h-9 px-2 text-xs border border-input rounded bg-background"
-              disabled={loading || analyzingReceipt || viewMode}
-            />
-          )}
-        </div>
-      </div>
-
-      {itemsPurchased.length > 0 && (
-        <div className="space-y-1.5">
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="w-full justify-between bg-transparent text-xs h-9">
-                <span>Items ({itemsPurchased.length})</span>
-                <span className="text-xs text-muted-foreground">View</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-              <DialogHeader>
-                <DialogTitle className="text-sm">Items Purchased</DialogTitle>
-                <DialogDescription className="text-xs">
-                  {viewMode
-                    ? "Items from this receipt"
-                    : "Review and edit the items extracted from your receipt."}
-                </DialogDescription>
-              </DialogHeader>
-              <div className="max-h-[100px] overflow-y-auto flex-1">
-                <div className="divide-y divide-border">
-                  {itemsPurchased.map((item, index) => (
-                    <div key={index} className="p-2 space-y-1.5">
-                      <div className="space-y-0.5">
-                        <Label htmlFor={`item-name-${index}`} className="text-xs text-muted-foreground">
-                          Item Name
-                        </Label>
-                        <input
-                          id={`item-name-${index}`}
-                          type="text"
-                          value={item.name}
-                          onChange={(e) => handleItemNameChange(index, e.target.value)}
-                          className="w-full px-2 py-1 text-xs border border-input rounded bg-background h-7"
-                          disabled={loading || analyzingReceipt || viewMode}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div className="space-y-0.5">
-                          <Label htmlFor={`item-quantity-${index}`} className="text-xs text-muted-foreground">
-                            Quantity
-                          </Label>
-                          <input
-                            id={`item-quantity-${index}`}
-                            type="number"
-                            min="0"
-                            step="1"
-                            value={item.quantity || ""}
-                            onChange={(e) => handleItemQuantityChange(index, e.target.value)}
-                            placeholder="0"
-                            className="w-full px-2 py-1 text-xs border border-input rounded bg-background h-7"
-                            disabled={loading || analyzingReceipt || viewMode}
-                          />
-                        </div>
-
-                        <div className="space-y-0.5">
-                          <Label htmlFor={`item-price-${index}`} className="text-xs text-muted-foreground">
-                            Price
-                          </Label>
-                          <div className="relative">
-                            <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                              $
-                            </span>
-                            <input
-                              id={`item-price-${index}`}
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.price || ""}
-                              onChange={(e) => handleItemPriceChange(index, e.target.value)}
-                              placeholder="0.00"
-                              className="w-full pl-5 pr-2 py-1 text-xs border border-input rounded bg-background h-7"
-                              disabled={loading || analyzingReceipt || viewMode}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      {!viewMode && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="w-full text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => handleRemoveItem(index)}
-                          disabled={loading || analyzingReceipt}
-                        >
-                          <X className="size-3 mr-1" />
-                          Remove Item
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
-
-      <div className="space-y-1.5">
-        <Label htmlFor="notes" className="text-xs font-medium">Message</Label>
-        <Textarea
-          id="notes"
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Add any notes about this receipt..."
-          rows={2}
-          className="text-xs"
-          disabled={loading || viewMode}
-        />
-      </div>
-
-      {/* Manual Input Dialog */}
-      <Dialog open={showManualInputDialog} onOpenChange={setShowManualInputDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="text-sm">Manual Receipt Entry</DialogTitle>
-            <DialogDescription className="text-xs">
-              Enter receipt information manually without uploading an image.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Receipt Image *</Label>
-              <div className="border-2 border-dashed border-border rounded-lg p-3">
-                {manualReceiptImagePreview ? (
-                  <div className="space-y-1.5">
-                    <div className="relative w-full border border-border rounded overflow-hidden bg-muted/50" style={{ maxHeight: "160px" }}>
-                      <img
-                        src={manualReceiptImagePreview}
-                        alt="Receipt preview"
-                        className="w-full h-full object-contain rounded"
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full text-xs h-8"
-                      onClick={() => {
-                        setManualReceiptImage(null)
-                        setManualReceiptImagePreview(null)
-                        if (manualImageInputRef.current) {
-                          manualImageInputRef.current.value = ""
-                        }
-                      }}
-                      disabled={loading}
-                    >
-                      <X className="mr-1 size-3" />
-                      Remove
-                    </Button>
-                  </div>
-                ) : (
+          {selectedFiles.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {selectedFiles.map((file, index) => (
+                <div
+                  key={`${file.name}-${index}`}
+                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300"
+                >
+                  <File className="h-4 w-4 shrink-0 text-zinc-500" />
+                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
                   <Button
                     type="button"
-                    variant="outline"
-                    className="w-full text-xs h-8"
-                    onClick={handleManualImageClick}
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-zinc-500 hover:text-zinc-100"
+                    onClick={() => handleRemoveFile(index)}
                     disabled={loading}
                   >
-                    <Upload className="mr-2 size-3" />
-                    Upload Receipt Image
+                    <X className="h-3.5 w-3.5" />
                   </Button>
-                )}
-              </div>
-              <input
-                ref={manualImageInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleManualImageChange}
-                style={{ display: "none" }}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="manual-project" className="text-xs font-medium">Project *</Label>
-                <Select
-                  value={selectedProject}
-                  onValueChange={setSelectedProject}
-                  disabled={loading || loadingProjects}
-                >
-                  <SelectTrigger id="manual-project" className="w-full h-9 text-xs">
-                    <SelectValue placeholder="Select project" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {projects.map((project) => (
-                      <SelectItem key={project.id} value={project.id} className="text-xs">
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="manual-vendor" className="text-xs font-medium">Vendor *</Label>
-                <input
-                  id="manual-vendor"
-                  type="text"
-                  value={vendorName}
-                  onChange={(e) => setVendorName(e.target.value)}
-                  placeholder="e.g., Home Depot"
-                  className="w-full h-9 px-2 text-xs border border-input rounded bg-background"
-                  disabled={loading}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="manual-category" className="text-xs font-medium">Category</Label>
-                <Select
-                  value={category}
-                  onValueChange={setCategory}
-                  disabled={loading}
-                >
-                  <SelectTrigger id="manual-category" className="w-full h-9 text-xs">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="lumber" className="text-xs">Lumber</SelectItem>
-                    <SelectItem value="concrete" className="text-xs">Concrete</SelectItem>
-                    <SelectItem value="finish" className="text-xs">Finish</SelectItem>
-                    <SelectItem value="gas" className="text-xs">Gas</SelectItem>
-                    <SelectItem value="framing" className="text-xs">Framing</SelectItem>
-                    <SelectItem value="small_tool" className="text-xs">Small Tool</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="manual-total" className="text-xs font-medium">Total *</Label>
-                <div className="relative">
-                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">$</span>
-                  <input
-                    id="manual-total"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={totalPrice}
-                    onChange={(e) => setTotalPrice(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full h-9 pl-6 pr-2 text-xs border border-input rounded bg-background"
-                    disabled={loading}
-                  />
                 </div>
-              </div>
+              ))}
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
+              <p className="mt-1 text-xs text-zinc-500">
+                Confirm the project, vendor, category, and total before submitting.
+              </p>
             </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="manual-notes" className="text-xs font-medium">Notes</Label>
-              <Textarea
-                id="manual-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Add any notes about this receipt..."
-                rows={2}
-                className="text-xs"
-                disabled={loading}
-              />
-            </div>
+            {itemTotal > 0 ? (
+              <div className="rounded-xl border border-zinc-800 bg-black px-3 py-2 text-left sm:text-right">
+                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Item total</div>
+                <div className="text-sm font-semibold text-zinc-100">{formatMoney(itemTotal)}</div>
+              </div>
+            ) : null}
           </div>
 
-          <div className="flex gap-2 justify-end pt-3">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Field label="Project">
+              <Select value={selectedProject} onValueChange={setSelectedProject} disabled={loading || loadingProjects}>
+                <SelectTrigger className="h-10 rounded-xl border-zinc-800 bg-black text-sm">
+                  <SelectValue placeholder={loadingProjects ? "Loading..." : "Select project"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Total price">
+              <div className="relative">
+                <DollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={totalPrice}
+                  onChange={(event) => setTotalPrice(event.target.value)}
+                  placeholder="0.00"
+                  className="h-10 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                  disabled={loading || analyzingReceipt}
+                />
+              </div>
+
+              {itemTotal > 0 ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-0 text-xs text-zinc-400 hover:text-zinc-100"
+                  onClick={() => setTotalPrice(itemTotal.toFixed(2))}
+                  disabled={loading}
+                >
+                  Use item total: {formatMoney(itemTotal)}
+                </Button>
+              ) : null}
+            </Field>
+
+            <Field label="Category">
+              <Select value={category} onValueChange={setCategory} disabled={loading}>
+                <SelectTrigger className="h-10 rounded-xl border-zinc-800 bg-black text-sm">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RECEIPT_CATEGORIES.map((receiptCategory) => (
+                    <SelectItem key={receiptCategory.value} value={receiptCategory.value}>
+                      {receiptCategory.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field label="Vendor name">
+              <input
+                type="text"
+                value={vendorName}
+                onChange={(event) => setVendorName(event.target.value)}
+                placeholder="e.g., Home Depot"
+                className="h-10 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                disabled={loading || analyzingReceipt}
+              />
+            </Field>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
+              <p className="mt-1 text-xs text-zinc-500">Add line items for better cost tracking.</p>
+            </div>
+
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="text-xs h-8"
-              onClick={() => setShowManualInputDialog(false)}
-              disabled={loading}
+              className="h-9 border-zinc-800 bg-black text-xs text-zinc-300 hover:bg-zinc-900"
+              onClick={addItem}
+              disabled={loading || analyzingReceipt}
+            >
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add item
+            </Button>
+          </div>
+
+          {itemsPurchased.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-black px-4 py-6 text-center text-sm text-zinc-500">
+              No receipt items added.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {itemsPurchased.map((item, index) => (
+                <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto]">
+                    <Field label="Item">
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(event) => updateItem(index, { name: event.target.value })}
+                        placeholder="Item name"
+                        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                        disabled={loading || analyzingReceipt}
+                      />
+                    </Field>
+
+                    <Field label="Qty">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={item.quantity || ""}
+                        onChange={(event) =>
+                          updateItem(index, {
+                            quantity: event.target.value ? Number(event.target.value) : undefined,
+                          })
+                        }
+                        placeholder="1"
+                        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                        disabled={loading || analyzingReceipt}
+                      />
+                    </Field>
+
+                    <Field label="Price">
+                      <div className="relative">
+                        <DollarSign className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.price || ""}
+                          onChange={(event) =>
+                            updateItem(index, {
+                              price: event.target.value ? Number.parseFloat(event.target.value) : undefined,
+                            })
+                          }
+                          placeholder="0.00"
+                          className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                          disabled={loading || analyzingReceipt}
+                        />
+                      </div>
+                    </Field>
+
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-zinc-500 hover:bg-red-500/10 hover:text-red-300"
+                        onClick={() => removeItem(index)}
+                        disabled={loading || analyzingReceipt}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
+          <Label htmlFor="receipt-notes" className="text-xs font-medium text-zinc-300">
+            Message
+          </Label>
+          <Textarea
+            id="receipt-notes"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Add any notes about this receipt..."
+            rows={3}
+            className="mt-2 rounded-xl border-zinc-800 bg-black text-sm text-zinc-100 placeholder:text-zinc-500"
+            disabled={loading}
+          />
+        </section>
+
+        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+          {onCancel ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+              disabled={loading || analyzingReceipt}
             >
               Cancel
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              className="text-xs h-8"
-              onClick={async () => {
-                if (!manualReceiptImage) {
-                  setError("Please upload a receipt image")
-                  return
-                }
-                if (!selectedProject || !totalPrice || !vendorName) {
-                  setError("Please fill in all required fields")
-                  return
-                }
-                setShowManualInputDialog(false)
-              }}
-              disabled={loading}
-            >
-              Continue
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+          ) : null}
 
-      <div className="flex gap-2 justify-end pt-3">
-        {viewMode ? (
-          <Button type="button" size="sm" onClick={onCancel} className="text-xs h-9">
-            Close
-          </Button>
-        ) : (
-          <>
-            {onCancel && (
-              <Button type="button" variant="outline" size="sm" onClick={onCancel} className="text-xs h-9" disabled={loading || analyzingReceipt}>
-                Cancel
-              </Button>
+          <Button type="submit" disabled={!canSubmit}>
+            {loading ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Submitting...
+              </>
+            ) : analyzingReceipt ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              "Submit receipt"
             )}
-            <Button
-              type="submit"
-              size="sm"
-              className="text-xs h-9"
-              disabled={loading || analyzingReceipt || !selectedProject || !totalPrice || (selectedFiles.length === 0 && vendorName === "")}
-            >
-              {loading ? "Submitting..." : analyzingReceipt ? "Analyzing..." : "Submit"}
-            </Button>
-          </>
-        )}
-      </div>
-    </form>
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }
+
+function Field({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-zinc-300">{label}</Label>
+      {children}
+    </div>
+  )
+}
+
+function Detail({
+  label,
+  value,
+}: {
+  label: string
+  value: string
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-black p-3">
+      <div className="text-xs font-medium text-zinc-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-zinc-100">{value}</div>
+    </div>
+  )
+}
+
+function AlertCard({
+  title,
+  message,
+  tone,
+  loading = false,
+}: {
+  title: string
+  message: string
+  tone: "error" | "info" | "success"
+  loading?: boolean
+}) {
+  const toneClass =
+    tone === "error"
+      ? "border-red-500/20 bg-red-500/10 text-red-200"
+      : tone === "success"
+        ? "border-green-500/20 bg-green-500/10 text-green-200"
+        : "border-blue-500/20 bg-blue-500/10 text-blue-200"
+
+  const Icon = loading ? Loader2 : tone === "success" ? CheckCircle2 : AlertTriangle
+
+  return (
+    <div className={`rounded-xl border p-3 text-sm ${toneClass}`}>
+      <div className="flex items-start gap-2">
+        <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${loading ? "animate-spin" : ""}`} />
+        <div>
+          <p className="font-semibold">{title}</p>
+          <p className="mt-1 text-xs leading-relaxed opacity-80">{message}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
