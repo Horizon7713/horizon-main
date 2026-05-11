@@ -99,22 +99,12 @@ function formatMoney(value: number) {
 }
 
 function formatCategory(value: string) {
-  const category = RECEIPT_CATEGORIES.find((item) => item.value === value)
+  const match = RECEIPT_CATEGORIES.find((category) => category.value === value)
 
-  if (category) return category.label
+  if (match) return match.label
   if (!value) return "No category"
 
   return value.charAt(0).toUpperCase() + value.slice(1).replaceAll("_", " ")
-}
-
-function normalizeReceiptItems(items: ReceiptItem[]) {
-  return items
-    .map((item) => ({
-      name: String(item.name || "").trim(),
-      quantity: item.quantity ? Number(item.quantity) : 1,
-      price: item.price ? Number(item.price) : 0,
-    }))
-    .filter((item) => item.name || item.price > 0)
 }
 
 function getPublicR2Url(signResult: R2SignResponse) {
@@ -127,6 +117,25 @@ function getUploadUrl(signResult: R2SignResponse) {
 
 function getUploadMimeType(signResult: R2SignResponse, fallback: string) {
   return signResult.contentType || fallback || "application/octet-stream"
+}
+
+function normalizeReceiptItems(items: ReceiptItem[]) {
+  return items
+    .map((item) => ({
+      name: String(item.name || "").trim(),
+      quantity: item.quantity ? Number(item.quantity) : 1,
+      price: item.price ? Number(item.price) : 0,
+    }))
+    .filter((item) => item.name || item.price > 0)
+}
+
+function getItemTotal(items: ReceiptItem[]) {
+  return items.reduce((sum, item) => {
+    const quantity = Number(item.quantity || 1)
+    const price = Number(item.price || 0)
+
+    return sum + quantity * price
+  }, 0)
 }
 
 export function FormNewReceipt({
@@ -156,14 +165,8 @@ export function FormNewReceipt({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  const itemTotal = useMemo(() => {
-    return itemsPurchased.reduce((sum, item) => {
-      const quantity = Number(item.quantity || 1)
-      const price = Number(item.price || 0)
-
-      return sum + quantity * price
-    }, 0)
-  }, [itemsPurchased])
+  const itemTotal = useMemo(() => getItemTotal(itemsPurchased), [itemsPurchased])
+  const cleanItems = useMemo(() => normalizeReceiptItems(itemsPurchased), [itemsPurchased])
 
   const canSubmit = useMemo(() => {
     if (viewMode || loading || analyzingReceipt) return false
@@ -177,11 +180,11 @@ export function FormNewReceipt({
       selectedFiles.length > 0 ||
       vendorName.trim().length > 0 ||
       notes.trim().length > 0 ||
-      normalizeReceiptItems(itemsPurchased).length > 0
+      cleanItems.length > 0
     )
   }, [
     analyzingReceipt,
-    itemsPurchased,
+    cleanItems.length,
     loading,
     notes,
     selectedFiles.length,
@@ -223,6 +226,8 @@ export function FormNewReceipt({
         }
 
         setProjects(data || [])
+      } catch (err) {
+        console.error("[FormNewReceipt] Unexpected project fetch error:", err)
       } finally {
         setLoadingProjects(false)
       }
@@ -240,14 +245,19 @@ export function FormNewReceipt({
   useEffect(() => {
     if (!viewMode || !initialData) return
 
-    setTotalPrice(initialData.totalPrice)
-    setSelectedProject(initialData.project)
+    setTotalPrice(initialData.totalPrice || "")
+    setSelectedProject(initialData.project || "")
     setProjectName(initialData.projectName || "Unknown Project")
     setNotes(initialData.notes || "")
     setItemsPurchased(initialData.items || [])
     setCategory(initialData.category || "")
     setVendorName(initialData.vendorName || "")
   }, [initialData, viewMode])
+
+  const resetFileInputs = () => {
+    if (fileInputRef.current) fileInputRef.current.value = ""
+    if (cameraInputRef.current) cameraInputRef.current.value = ""
+  }
 
   const resetForm = () => {
     setSelectedFiles([])
@@ -260,9 +270,7 @@ export function FormNewReceipt({
     setItemsPurchased([])
     setQualityAssessment(null)
     setError(null)
-
-    if (fileInputRef.current) fileInputRef.current.value = ""
-    if (cameraInputRef.current) cameraInputRef.current.value = ""
+    resetFileInputs()
   }
 
   const fileToBase64 = (file: File): Promise<string> => {
@@ -280,51 +288,49 @@ export function FormNewReceipt({
   }
 
   const getOptimizedImageBase64 = async (file: File): Promise<string> => {
-  if (!file.type.startsWith("image/")) {
-    return fileToBase64(file)
-  }
-
-  const maxSize = 1600
-  const quality = 0.82
-  const imageUrl = URL.createObjectURL(file)
-
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => resolve(img)
-      img.onerror = reject
-      img.src = imageUrl
-    })
-
-    const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
-    const width = Math.round(image.width * scale)
-    const height = Math.round(image.height * scale)
-
-    const canvas = document.createElement("canvas")
-    canvas.width = width
-    canvas.height = height
-
-    const context = canvas.getContext("2d")
-
-    if (!context) {
+    if (!file.type.startsWith("image/")) {
       return fileToBase64(file)
     }
 
-    context.drawImage(image, 0, 0, width, height)
+    const maxSize = 1600
+    const quality = 0.82
+    const imageUrl = URL.createObjectURL(file)
 
-    const dataUrl = canvas.toDataURL("image/jpeg", quality)
+    try {
+      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => resolve(img)
+        img.onerror = reject
+        img.src = imageUrl
+      })
 
-    return dataUrl.split(",")[1] || ""
-  } finally {
-    URL.revokeObjectURL(imageUrl)
+      const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
+      const width = Math.round(image.width * scale)
+      const height = Math.round(image.height * scale)
+
+      const canvas = document.createElement("canvas")
+      canvas.width = width
+      canvas.height = height
+
+      const context = canvas.getContext("2d")
+
+      if (!context) {
+        return fileToBase64(file)
+      }
+
+      context.drawImage(image, 0, 0, width, height)
+
+      const dataUrl = canvas.toDataURL("image/jpeg", quality)
+
+      return dataUrl.split(",")[1] || ""
+    } finally {
+      URL.revokeObjectURL(imageUrl)
+    }
   }
-}
 
   const clearFailedReceiptFile = () => {
     setSelectedFiles([])
-
-    if (fileInputRef.current) fileInputRef.current.value = ""
-    if (cameraInputRef.current) cameraInputRef.current.value = ""
+    resetFileInputs()
   }
 
   const analyzeReceiptImage = async (file: File) => {
@@ -429,9 +435,7 @@ export function FormNewReceipt({
 
   const handleRemoveFile = (index: number) => {
     setSelectedFiles((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
-
-    if (fileInputRef.current) fileInputRef.current.value = ""
-    if (cameraInputRef.current) cameraInputRef.current.value = ""
+    resetFileInputs()
   }
 
   const addItem = () => {
@@ -486,12 +490,11 @@ export function FormNewReceipt({
     }
 
     const uploadUrl = getUploadUrl(result)
+    const publicUrl = getPublicR2Url(result)
 
     if (!uploadUrl) {
       throw new Error("Cloudflare R2 signing response did not include uploadUrl or signedUrl.")
     }
-
-    const publicUrl = getPublicR2Url(result)
 
     if (!publicUrl) {
       throw new Error("Cloudflare R2 signing response did not include publicUrl, fileUrl, or url.")
@@ -554,8 +557,8 @@ export function FormNewReceipt({
       if (updateError) {
         console.error("[FormNewReceipt] Error updating project budget:", updateError)
       }
-    } catch (error) {
-      console.error("[FormNewReceipt] Error updating project budget:", error)
+    } catch (err) {
+      console.error("[FormNewReceipt] Error updating project budget:", err)
     }
   }
 
@@ -573,8 +576,6 @@ export function FormNewReceipt({
       setError("Please enter a valid total price.")
       return
     }
-
-    const cleanItems = normalizeReceiptItems(itemsPurchased)
 
     if (selectedFiles.length === 0 && !vendorName.trim() && !notes.trim() && cleanItems.length === 0) {
       setError("Please upload a receipt, enter a vendor, add notes, or add at least one item.")
@@ -622,106 +623,24 @@ export function FormNewReceipt({
 
   if (viewMode) {
     return (
-      <div className="mx-auto w-full max-w-3xl space-y-4">
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="mb-4 flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
-              <Receipt className="h-4 w-4 text-zinc-300" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
-              <p className="mt-1 text-xs text-zinc-500">Review saved receipt information.</p>
-            </div>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Detail label="Project" value={projectName || "No project"} />
-            <Detail label="Total" value={formatMoney(Number.parseFloat(totalPrice || "0"))} />
-            <Detail label="Category" value={formatCategory(category)} />
-            <Detail label="Vendor" value={vendorName || "No vendor"} />
-          </div>
-
-          {notes ? (
-            <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-3">
-              <div className="text-xs font-medium text-zinc-500">Message</div>
-              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">{notes}</p>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
-            {itemTotal > 0 ? (
-              <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span>
-            ) : null}
-          </div>
-
-          {itemsPurchased.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-800 bg-black p-4 text-center text-sm text-zinc-500">
-              No receipt items saved.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {itemsPurchased.map((item, index) => (
-                <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
-                  <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
-                  <div className="mt-1 text-xs text-zinc-500">
-                    Qty {item.quantity || 1} • {formatMoney(Number(item.price || 0))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        {initialData?.files?.length ? (
-          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-zinc-100">Receipt files</h3>
-            <div className="space-y-2">
-              {initialData.files.map((file, index) => {
-                if (!file.url) return null
-
-                const isImage = file.mimeType?.startsWith("image/")
-                const fileName = file.url.split("/").pop() || "receipt-file"
-
-                return (
-                  <a
-                    key={`${file.url}-${index}`}
-                    href={file.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    download={fileName}
-                    className="block overflow-hidden rounded-xl border border-zinc-800 bg-black text-sm text-zinc-300 hover:bg-zinc-900"
-                  >
-                    {isImage ? (
-                      <img src={file.url} alt="Receipt" className="max-h-72 w-full object-contain" />
-                    ) : (
-                      <div className="flex items-center gap-2 p-3">
-                        <File className="h-4 w-4" />
-                        <span className="min-w-0 flex-1 truncate">{fileName}</span>
-                        <span className="text-xs text-zinc-500">Open</span>
-                      </div>
-                    )}
-                  </a>
-                )
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        <div className="flex justify-end">
-          <Button type="button" onClick={onCancel}>
-            Close
-          </Button>
-        </div>
-      </div>
+      <ReceiptView
+        category={category}
+        initialData={initialData}
+        itemTotal={itemTotal}
+        itemsPurchased={itemsPurchased}
+        notes={notes}
+        onCancel={onCancel}
+        projectName={projectName}
+        totalPrice={totalPrice}
+        vendorName={vendorName}
+      />
     )
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
-      <form onSubmit={handleSubmit} className="space-y-4">
+  <div className="mx-auto flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden px-1 sm:max-h-none sm:px-0">
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-4 sm:space-y-4 sm:overflow-visible sm:pr-0">
         {error ? <AlertCard title="Receipt issue" message={error} tone="error" /> : null}
 
         {analyzingReceipt ? (
@@ -741,19 +660,11 @@ export function FormNewReceipt({
           />
         ) : null}
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="mb-3 flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
-              <Receipt className="h-4 w-4 text-zinc-300" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Receipt capture</h3>
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-                Upload a receipt or take a photo. Images are resized for fast AI extraction, then saved to Cloudflare R2.
-              </p>
-            </div>
-          </div>
-
+        <FormSection
+          icon={<Receipt className="h-4 w-4 text-zinc-300" />}
+          title="Receipt capture"
+          description="Upload a receipt or take a photo. Images are resized for fast AI extraction, then saved to Cloudflare R2."
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -778,7 +689,7 @@ export function FormNewReceipt({
             <Button
               type="button"
               variant="outline"
-              className="h-10 border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900"
+              className="h-11 w-full border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 sm:h-10"
               onClick={() => fileInputRef.current?.click()}
               disabled={loading}
             >
@@ -789,7 +700,7 @@ export function FormNewReceipt({
             <Button
               type="button"
               variant="outline"
-              className="h-10 border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900"
+              className="h-11 w-full border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 sm:h-10"
               onClick={() => cameraInputRef.current?.click()}
               disabled={loading}
             >
@@ -807,11 +718,12 @@ export function FormNewReceipt({
                 >
                   <File className="h-4 w-4 shrink-0 text-zinc-500" />
                   <span className="min-w-0 flex-1 truncate">{file.name}</span>
+
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-zinc-500 hover:text-zinc-100"
+                    className="h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-100"
                     onClick={() => handleRemoveFile(index)}
                     disabled={loading}
                   >
@@ -821,29 +733,24 @@ export function FormNewReceipt({
               ))}
             </div>
           ) : null}
-        </section>
+        </FormSection>
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
-              <p className="mt-1 text-xs text-zinc-500">
-                Confirm the project, vendor, category, and total before submitting.
-              </p>
-            </div>
-
-            {itemTotal > 0 ? (
+        <FormSection
+          title="Receipt details"
+          description="Confirm the project, vendor, category, and total before submitting."
+          rightSlot={
+            itemTotal > 0 ? (
               <div className="rounded-xl border border-zinc-800 bg-black px-3 py-2 text-left sm:text-right">
                 <div className="text-[10px] uppercase tracking-wide text-zinc-500">Item total</div>
                 <div className="text-sm font-semibold text-zinc-100">{formatMoney(itemTotal)}</div>
               </div>
-            ) : null}
-          </div>
-
-          <div className="grid gap-3 md:grid-cols-2">
+            ) : null
+          }
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Project">
               <Select value={selectedProject} onValueChange={setSelectedProject} disabled={loading || loadingProjects}>
-                <SelectTrigger className="h-10 rounded-xl border-zinc-800 bg-black text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
                   <SelectValue placeholder={loadingProjects ? "Loading..." : "Select project"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -866,7 +773,7 @@ export function FormNewReceipt({
                   value={totalPrice}
                   onChange={(event) => setTotalPrice(event.target.value)}
                   placeholder="0.00"
-                  className="h-10 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                  className="h-11 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
                   disabled={loading || analyzingReceipt}
                 />
               </div>
@@ -876,7 +783,7 @@ export function FormNewReceipt({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-0 text-xs text-zinc-400 hover:text-zinc-100"
+                  className="h-8 px-0 text-xs text-zinc-400 hover:text-zinc-100"
                   onClick={() => setTotalPrice(itemTotal.toFixed(2))}
                   disabled={loading}
                 >
@@ -887,7 +794,7 @@ export function FormNewReceipt({
 
             <Field label="Category">
               <Select value={category} onValueChange={setCategory} disabled={loading}>
-                <SelectTrigger className="h-10 rounded-xl border-zinc-800 bg-black text-sm">
+                <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -906,33 +813,30 @@ export function FormNewReceipt({
                 value={vendorName}
                 onChange={(event) => setVendorName(event.target.value)}
                 placeholder="e.g., Home Depot"
-                className="h-10 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
                 disabled={loading || analyzingReceipt}
               />
             </Field>
           </div>
-        </section>
+        </FormSection>
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
-              <p className="mt-1 text-xs text-zinc-500">Add line items for better cost tracking.</p>
-            </div>
-
+        <FormSection
+          title="Items purchased"
+          description="Add line items for better cost tracking."
+          rightSlot={
             <Button
               type="button"
               variant="outline"
               size="sm"
-              className="h-9 border-zinc-800 bg-black text-xs text-zinc-300 hover:bg-zinc-900"
+              className="h-9 shrink-0 border-zinc-800 bg-black text-xs text-zinc-300 hover:bg-zinc-900"
               onClick={addItem}
               disabled={loading || analyzingReceipt}
             >
               <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add item
             </Button>
-          </div>
-
+          }
+        >
           {itemsPurchased.length === 0 ? (
             <div className="rounded-xl border border-dashed border-zinc-800 bg-black px-4 py-6 text-center text-sm text-zinc-500">
               No receipt items added.
@@ -941,14 +845,14 @@ export function FormNewReceipt({
             <div className="space-y-2">
               {itemsPurchased.map((item, index) => (
                 <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
-                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto]">
+                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto] sm:gap-2">
                     <Field label="Item">
                       <input
                         type="text"
                         value={item.name}
                         onChange={(event) => updateItem(index, { name: event.target.value })}
                         placeholder="Item name"
-                        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                        className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                         disabled={loading || analyzingReceipt}
                       />
                     </Field>
@@ -965,7 +869,7 @@ export function FormNewReceipt({
                           })
                         }
                         placeholder="1"
-                        className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                        className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                         disabled={loading || analyzingReceipt}
                       />
                     </Field>
@@ -984,18 +888,18 @@ export function FormNewReceipt({
                             })
                           }
                           placeholder="0.00"
-                          className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700"
+                          className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                           disabled={loading || analyzingReceipt}
                         />
                       </div>
                     </Field>
 
-                    <div className="flex items-end">
+                    <div className="flex items-end justify-end sm:justify-start">
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-9 w-9 text-zinc-500 hover:bg-red-500/10 hover:text-red-300"
+                        className="h-10 w-full text-zinc-500 hover:bg-red-500/10 hover:text-red-300 sm:h-9 sm:w-9"
                         onClick={() => removeItem(index)}
                         disabled={loading || analyzingReceipt}
                       >
@@ -1007,36 +911,37 @@ export function FormNewReceipt({
               ))}
             </div>
           )}
-        </section>
+        </FormSection>
 
-        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4">
-          <Label htmlFor="receipt-notes" className="text-xs font-medium text-zinc-300">
-            Message
-          </Label>
+        <FormSection title="Message">
           <Textarea
             id="receipt-notes"
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
             placeholder="Add any notes about this receipt..."
             rows={3}
-            className="mt-2 rounded-xl border-zinc-800 bg-black text-sm text-zinc-100 placeholder:text-zinc-500"
+            className="rounded-xl border-zinc-800 bg-black text-sm text-zinc-100 placeholder:text-zinc-500"
             disabled={loading}
           />
-        </section>
+        </FormSection>
 
-        <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+              </div>
+
+      <div className="shrink-0 border-t border-zinc-800 bg-black/95 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1">
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           {onCancel ? (
             <Button
               type="button"
               variant="outline"
               onClick={onCancel}
               disabled={loading || analyzingReceipt}
+              className="w-full sm:w-auto"
             >
               Cancel
             </Button>
           ) : null}
 
-          <Button type="submit" disabled={!canSubmit}>
+          <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
             {loading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -1051,9 +956,168 @@ export function FormNewReceipt({
               "Submit receipt"
             )}
           </Button>
+                </div>
+      </div>
+    </form>
+  </div>
+)
+}
+
+function ReceiptView({
+  category,
+  initialData,
+  itemTotal,
+  itemsPurchased,
+  notes,
+  onCancel,
+  projectName,
+  totalPrice,
+  vendorName,
+}: {
+  category: string
+  initialData?: FormNewReceiptProps["initialData"]
+  itemTotal: number
+  itemsPurchased: ReceiptItem[]
+  notes: string
+  onCancel?: () => void
+  projectName: string
+  totalPrice: string
+  vendorName: string
+}) {
+  return (
+    <div className="mx-auto w-full max-w-3xl space-y-4 px-1 sm:px-0">
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+        <div className="mb-4 flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
+            <Receipt className="h-4 w-4 text-zinc-300" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
+            <p className="mt-1 text-xs text-zinc-500">Review saved receipt information.</p>
+          </div>
         </div>
-      </form>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Detail label="Project" value={projectName || "No project"} />
+          <Detail label="Total" value={formatMoney(Number.parseFloat(totalPrice || "0"))} />
+          <Detail label="Category" value={formatCategory(category)} />
+          <Detail label="Vendor" value={vendorName || "No vendor"} />
+        </div>
+
+        {notes ? (
+          <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-3">
+            <div className="text-xs font-medium text-zinc-500">Message</div>
+            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">{notes}</p>
+          </div>
+        ) : null}
+      </section>
+
+      <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
+          {itemTotal > 0 ? (
+            <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span>
+          ) : null}
+        </div>
+
+        {itemsPurchased.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-zinc-800 bg-black p-4 text-center text-sm text-zinc-500">
+            No receipt items saved.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {itemsPurchased.map((item, index) => (
+              <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
+                <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
+                <div className="mt-1 text-xs text-zinc-500">
+                  Qty {item.quantity || 1} • {formatMoney(Number(item.price || 0))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {initialData?.files?.length ? (
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+          <h3 className="mb-3 text-sm font-semibold text-zinc-100">Receipt files</h3>
+          <div className="space-y-2">
+            {initialData.files.map((file, index) => {
+              if (!file.url) return null
+
+              const isImage = file.mimeType?.startsWith("image/")
+              const fileName = file.url.split("/").pop() || "receipt-file"
+
+              return (
+                <a
+                  key={`${file.url}-${index}`}
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={fileName}
+                  className="block overflow-hidden rounded-xl border border-zinc-800 bg-black text-sm text-zinc-300 hover:bg-zinc-900"
+                >
+                  {isImage ? (
+                    <img src={file.url} alt="Receipt" className="max-h-72 w-full object-contain" />
+                  ) : (
+                    <div className="flex items-center gap-2 p-3">
+                      <File className="h-4 w-4" />
+                      <span className="min-w-0 flex-1 truncate">{fileName}</span>
+                      <span className="text-xs text-zinc-500">Open</span>
+                    </div>
+                  )}
+                </a>
+              )
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="flex justify-end">
+        <Button type="button" onClick={onCancel} className="w-full sm:w-auto">
+          Close
+        </Button>
+      </div>
     </div>
+  )
+}
+
+function FormSection({
+  children,
+  description,
+  icon,
+  rightSlot,
+  title,
+}: {
+  children: React.ReactNode
+  description?: string
+  icon?: React.ReactNode
+  rightSlot?: React.ReactNode
+  title: string
+}) {
+  return (
+    <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+      <div className="mb-3 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-3">
+          {icon ? (
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
+              {icon}
+            </div>
+          ) : null}
+
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
+            {description ? (
+              <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>
+            ) : null}
+          </div>
+        </div>
+
+        {rightSlot ? <div className="shrink-0">{rightSlot}</div> : null}
+      </div>
+
+      {children}
+    </section>
   )
 }
 

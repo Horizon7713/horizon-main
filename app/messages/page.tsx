@@ -12,11 +12,12 @@ async function sendMessage(formData: FormData) {
   const fileDataJson = formData.get("fileData") as string
   const currentProject = formData.get("currentProject") as string
   const messageType = formData.get("messageType") as string
-  const progressUpdate = formData.get("progressUpdate") as string
-  const totalPrice = formData.get("totalPrice") as string
-  const itemsPurchasedJson = formData.get("itemsPurchased") as string
-  const category = formData.get("category") as string
-  const vendorName = formData.get("vendorName") as string
+const progressUpdate = formData.get("progressUpdate") as string
+const durationMinutes = formData.get("durationMinutes") as string
+const totalPrice = formData.get("totalPrice") as string
+const itemsPurchasedJson = formData.get("itemsPurchased") as string
+const category = formData.get("category") as string
+const vendorName = formData.get("vendorName") as string
 
   const originalContent = String(formData.get("originalContent") || content || "").trim()
   const originalLanguage = String(formData.get("originalLanguage") || "en")
@@ -126,13 +127,14 @@ async function sendMessage(formData: FormData) {
   }
 
   if (messageType === "timecard" && currentProject && progressUpdate) {
-    const { error: timecardError } = await supabase.from("timecards").insert({
-      uploaded_by: userProfile.id,
-      work_type: progressUpdate,
-      notes: content?.trim() || null,
-      project_id: currentProject,
-      message_bundle: bundleId,
-    })
+  const { error: timecardError } = await supabase.from("timecards").insert({
+    uploaded_by: userProfile.id,
+    work_type: progressUpdate,
+    notes: content?.trim() || null,
+    project_id: currentProject,
+    message_bundle: bundleId,
+    duration_minutes: durationMinutes ? Number(durationMinutes) : null,
+  })
 
     if (timecardError) {
       console.error("[v0] Error creating timecard entry:", timecardError)
