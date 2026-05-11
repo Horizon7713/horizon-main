@@ -71,7 +71,7 @@ interface FormNewReceiptProps {
     project: string
     projectName?: string
     notes: string
-    items: Array<{ name: string; quantity?: number; price?: number }>
+    items: Array<{ name: string; quantity?: number | null; price?: number | null }>
     files: Array<{ url: string | null; mimeType: string | null }>
     category?: string
     vendorName?: string
@@ -117,6 +117,10 @@ function getUploadUrl(signResult: R2SignResponse) {
 
 function getUploadMimeType(signResult: R2SignResponse, fallback: string) {
   return signResult.contentType || fallback || "application/octet-stream"
+}
+
+function getFileKey(file: File) {
+  return `${file.name}-${file.size}-${file.lastModified}`
 }
 
 function normalizeReceiptItems(items: ReceiptItem[]) {
@@ -165,8 +169,8 @@ export function FormNewReceipt({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  const itemTotal = useMemo(() => getItemTotal(itemsPurchased), [itemsPurchased])
   const cleanItems = useMemo(() => normalizeReceiptItems(itemsPurchased), [itemsPurchased])
+  const itemTotal = useMemo(() => getItemTotal(itemsPurchased), [itemsPurchased])
 
   const canSubmit = useMemo(() => {
     if (viewMode || loading || analyzingReceipt) return false
@@ -361,7 +365,7 @@ export function FormNewReceipt({
 
       const result = await response.json()
 
-      if (!result.success || !result.data) {
+      if (!response.ok || !result.success || !result.data) {
         setError(String(result.error || "Could not automatically extract data from receipt."))
         clearFailedReceiptFile()
         return
@@ -424,13 +428,21 @@ export function FormNewReceipt({
     if (files.length === 0) return
 
     setError(null)
-    setSelectedFiles((previous) => [...previous, ...files])
+
+    setSelectedFiles((previous) => {
+      const existingKeys = new Set(previous.map(getFileKey))
+      const newUniqueFiles = files.filter((file) => !existingKeys.has(getFileKey(file)))
+
+      return [...previous, ...newUniqueFiles]
+    })
 
     const firstImageFile = files.find((file) => file.type.startsWith("image/"))
 
     if (firstImageFile) {
       analyzeReceiptImage(firstImageFile)
     }
+
+    event.target.value = ""
   }
 
   const handleRemoveFile = (index: number) => {
@@ -505,8 +517,12 @@ export function FormNewReceipt({
 
   const uploadReceiptFilesToR2 = async () => {
     const uploadedFiles: Array<{ url: string; mimeType: string }> = []
+    const uniqueFiles = selectedFiles.filter(
+      (file, index, array) =>
+        index === array.findIndex((otherFile) => getFileKey(otherFile) === getFileKey(file)),
+    )
 
-    for (const file of selectedFiles) {
+    for (const file of uniqueFiles) {
       const signResult = await getR2SignedUpload(file)
       const uploadUrl = getUploadUrl(signResult)
       const publicUrl = getPublicR2Url(signResult)
@@ -518,6 +534,7 @@ export function FormNewReceipt({
           "Content-Type": contentType,
         },
         body: file,
+        mode: "cors",
       })
 
       if (!uploadResponse.ok) {
@@ -589,8 +606,10 @@ export function FormNewReceipt({
       const bundleId = crypto.randomUUID()
       const uploadedFileData = await uploadReceiptFilesToR2()
 
+      const messageContent = notes.trim() || `Receipt submitted for ${formatMoney(receiptTotal)}`
+
       const formData = new FormData()
-      formData.append("content", notes.trim())
+      formData.append("content", messageContent)
       formData.append("fileData", JSON.stringify(uploadedFileData))
       formData.append("bundleId", bundleId)
       formData.append("userId", userId)
@@ -638,329 +657,328 @@ export function FormNewReceipt({
   }
 
   return (
-  <div className="mx-auto flex max-h-[80vh] w-full max-w-3xl flex-col overflow-hidden px-1 sm:max-h-none sm:px-0">
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1 pb-4 sm:space-y-4 sm:overflow-visible sm:pr-0">
-        {error ? <AlertCard title="Receipt issue" message={error} tone="error" /> : null}
+    <div className="mx-auto flex h-[min(760px,calc(100dvh-120px))] w-full max-w-3xl flex-col overflow-hidden px-1 sm:px-0">
+      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-4 sm:space-y-4">
+          {error ? <AlertCard title="Receipt issue" message={error} tone="error" /> : null}
 
-        {analyzingReceipt ? (
-          <AlertCard
-            title="Analyzing receipt"
-            message="Reading receipt image with faster server-side AI extraction..."
-            tone="info"
-            loading
-          />
-        ) : null}
+          {analyzingReceipt ? (
+            <AlertCard
+              title="Analyzing receipt"
+              message="Reading receipt image with faster server-side AI extraction..."
+              tone="info"
+              loading
+            />
+          ) : null}
 
-        {qualityAssessment && qualityAssessment.confidencePercentage >= 60 ? (
-          <AlertCard
-            title="Receipt analyzed"
-            message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence.`}
-            tone="success"
-          />
-        ) : null}
+          {qualityAssessment && qualityAssessment.confidencePercentage >= 60 ? (
+            <AlertCard
+              title="Receipt analyzed"
+              message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence.`}
+              tone="success"
+            />
+          ) : null}
 
-        <FormSection
-          icon={<Receipt className="h-4 w-4 text-zinc-300" />}
-          title="Receipt capture"
-          description="Upload a receipt or take a photo. Images are resized for fast AI extraction, then saved to Cloudflare R2."
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept="image/*,application/pdf"
-            className="hidden"
-            onChange={handleFileChange}
-            disabled={loading}
-          />
-
-          <input
-            ref={cameraInputRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFileChange}
-            disabled={loading}
-          />
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 sm:h-10"
-              onClick={() => fileInputRef.current?.click()}
+          <FormSection
+            icon={<Receipt className="h-4 w-4 text-zinc-300" />}
+            title="Receipt capture"
+            description="Upload a receipt or take a photo. Images are resized for fast AI extraction, then saved to Cloudflare R2."
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,application/pdf"
+              className="hidden"
+              onChange={handleFileChange}
               disabled={loading}
-            >
-              <Upload className="mr-2 h-4 w-4" />
-              Upload receipt
-            </Button>
+            />
 
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 sm:h-10"
-              onClick={() => cameraInputRef.current?.click()}
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFileChange}
               disabled={loading}
-            >
-              <Camera className="mr-2 h-4 w-4" />
-              Take photo
-            </Button>
-          </div>
+            />
 
-          {selectedFiles.length > 0 ? (
-            <div className="mt-3 space-y-2">
-              {selectedFiles.map((file, index) => (
-                <div
-                  key={`${file.name}-${index}`}
-                  className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300"
-                >
-                  <File className="h-4 w-4 shrink-0 text-zinc-500" />
-                  <span className="min-w-0 flex-1 truncate">{file.name}</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 sm:h-10"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Upload receipt
+              </Button>
 
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full border-zinc-800 bg-black text-zinc-300 hover:bg-zinc-900 sm:h-10"
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={loading}
+              >
+                <Camera className="mr-2 h-4 w-4" />
+                Take photo
+              </Button>
+            </div>
+
+            {selectedFiles.length > 0 ? (
+              <div className="mt-3 max-h-24 space-y-2 overflow-y-auto pr-1">
+                {selectedFiles.map((file, index) => (
+                  <div
+                    key={`${getFileKey(file)}-${index}`}
+                    className="flex items-center gap-2 rounded-xl border border-zinc-800 bg-black px-3 py-2 text-xs text-zinc-300"
+                  >
+                    <File className="h-4 w-4 shrink-0 text-zinc-500" />
+                    <span className="min-w-0 flex-1 truncate">{file.name}</span>
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-100"
+                      onClick={() => handleRemoveFile(index)}
+                      disabled={loading}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </FormSection>
+
+          <FormSection
+            title="Receipt details"
+            description="Confirm the project, vendor, category, and total before submitting."
+            rightSlot={
+              itemTotal > 0 ? (
+                <div className="rounded-xl border border-zinc-800 bg-black px-3 py-2 text-left sm:text-right">
+                  <div className="text-[10px] uppercase tracking-wide text-zinc-500">Item total</div>
+                  <div className="text-sm font-semibold text-zinc-100">{formatMoney(itemTotal)}</div>
+                </div>
+              ) : null
+            }
+          >
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Project">
+                <Select value={selectedProject} onValueChange={setSelectedProject} disabled={loading || loadingProjects}>
+                  <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
+                    <SelectValue placeholder={loadingProjects ? "Loading..." : "Select project"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((project) => (
+                      <SelectItem key={project.id} value={project.id}>
+                        {project.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+
+              <Field label="Total price">
+                <div className="relative">
+                  <DollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={totalPrice}
+                    onChange={(event) => setTotalPrice(event.target.value)}
+                    placeholder="0.00"
+                    className="h-11 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
+                    disabled={loading || analyzingReceipt}
+                  />
+                </div>
+
+                {itemTotal > 0 ? (
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 shrink-0 text-zinc-500 hover:text-zinc-100"
-                    onClick={() => handleRemoveFile(index)}
+                    size="sm"
+                    className="h-8 px-0 text-xs text-zinc-400 hover:text-zinc-100"
+                    onClick={() => setTotalPrice(itemTotal.toFixed(2))}
                     disabled={loading}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    Use item total: {formatMoney(itemTotal)}
                   </Button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </FormSection>
+                ) : null}
+              </Field>
 
-        <FormSection
-          title="Receipt details"
-          description="Confirm the project, vendor, category, and total before submitting."
-          rightSlot={
-            itemTotal > 0 ? (
-              <div className="rounded-xl border border-zinc-800 bg-black px-3 py-2 text-left sm:text-right">
-                <div className="text-[10px] uppercase tracking-wide text-zinc-500">Item total</div>
-                <div className="text-sm font-semibold text-zinc-100">{formatMoney(itemTotal)}</div>
-              </div>
-            ) : null
-          }
-        >
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Project">
-              <Select value={selectedProject} onValueChange={setSelectedProject} disabled={loading || loadingProjects}>
-                <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
-                  <SelectValue placeholder={loadingProjects ? "Loading..." : "Select project"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((project) => (
-                    <SelectItem key={project.id} value={project.id}>
-                      {project.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+              <Field label="Category">
+                <Select value={category} onValueChange={setCategory} disabled={loading}>
+                  <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {RECEIPT_CATEGORIES.map((receiptCategory) => (
+                      <SelectItem key={receiptCategory.value} value={receiptCategory.value}>
+                        {receiptCategory.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
 
-            <Field label="Total price">
-              <div className="relative">
-                <DollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+              <Field label="Vendor name">
                 <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={totalPrice}
-                  onChange={(event) => setTotalPrice(event.target.value)}
-                  placeholder="0.00"
-                  className="h-11 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
+                  type="text"
+                  value={vendorName}
+                  onChange={(event) => setVendorName(event.target.value)}
+                  placeholder="e.g., Home Depot"
+                  className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
                   disabled={loading || analyzingReceipt}
                 />
-              </div>
-
-              {itemTotal > 0 ? (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 px-0 text-xs text-zinc-400 hover:text-zinc-100"
-                  onClick={() => setTotalPrice(itemTotal.toFixed(2))}
-                  disabled={loading}
-                >
-                  Use item total: {formatMoney(itemTotal)}
-                </Button>
-              ) : null}
-            </Field>
-
-            <Field label="Category">
-              <Select value={category} onValueChange={setCategory} disabled={loading}>
-                <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {RECEIPT_CATEGORIES.map((receiptCategory) => (
-                    <SelectItem key={receiptCategory.value} value={receiptCategory.value}>
-                      {receiptCategory.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="Vendor name">
-              <input
-                type="text"
-                value={vendorName}
-                onChange={(event) => setVendorName(event.target.value)}
-                placeholder="e.g., Home Depot"
-                className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
-                disabled={loading || analyzingReceipt}
-              />
-            </Field>
-          </div>
-        </FormSection>
-
-        <FormSection
-          title="Items purchased"
-          description="Add line items for better cost tracking."
-          rightSlot={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-9 shrink-0 border-zinc-800 bg-black text-xs text-zinc-300 hover:bg-zinc-900"
-              onClick={addItem}
-              disabled={loading || analyzingReceipt}
-            >
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Add item
-            </Button>
-          }
-        >
-          {itemsPurchased.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-zinc-800 bg-black px-4 py-6 text-center text-sm text-zinc-500">
-              No receipt items added.
+              </Field>
             </div>
-          ) : (
-            <div className="space-y-2">
-              {itemsPurchased.map((item, index) => (
-                <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto] sm:gap-2">
-                    <Field label="Item">
-                      <input
-                        type="text"
-                        value={item.name}
-                        onChange={(event) => updateItem(index, { name: event.target.value })}
-                        placeholder="Item name"
-                        className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
-                        disabled={loading || analyzingReceipt}
-                      />
-                    </Field>
+          </FormSection>
 
-                    <Field label="Qty">
-                      <input
-                        type="number"
-                        min="0"
-                        step="1"
-                        value={item.quantity || ""}
-                        onChange={(event) =>
-                          updateItem(index, {
-                            quantity: event.target.value ? Number(event.target.value) : undefined,
-                          })
-                        }
-                        placeholder="1"
-                        className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
-                        disabled={loading || analyzingReceipt}
-                      />
-                    </Field>
+          <FormSection
+            title="Items purchased"
+            description="AI extracted items stay inside this scroll box so the form does not stretch off screen."
+            rightSlot={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 shrink-0 border-zinc-800 bg-black text-xs text-zinc-300 hover:bg-zinc-900"
+                onClick={addItem}
+                disabled={loading || analyzingReceipt}
+              >
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add item
+              </Button>
+            }
+          >
+            {itemsPurchased.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-800 bg-black px-4 py-6 text-center text-sm text-zinc-500">
+                No receipt items added.
+              </div>
+            ) : (
+              <div className="max-h-[260px] space-y-2 overflow-y-auto overscroll-contain pr-1">
+                {itemsPurchased.map((item, index) => (
+                  <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto] sm:gap-2">
+                      <Field label="Item">
+                        <input
+                          type="text"
+                          value={item.name}
+                          onChange={(event) => updateItem(index, { name: event.target.value })}
+                          placeholder="Item name"
+                          className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
+                          disabled={loading || analyzingReceipt}
+                        />
+                      </Field>
 
-                    <Field label="Price">
-                      <div className="relative">
-                        <DollarSign className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                      <Field label="Qty">
                         <input
                           type="number"
                           min="0"
-                          step="0.01"
-                          value={item.price || ""}
+                          step="1"
+                          value={item.quantity || ""}
                           onChange={(event) =>
                             updateItem(index, {
-                              price: event.target.value ? Number.parseFloat(event.target.value) : undefined,
+                              quantity: event.target.value ? Number(event.target.value) : undefined,
                             })
                           }
-                          placeholder="0.00"
-                          className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
+                          placeholder="1"
+                          className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                           disabled={loading || analyzingReceipt}
                         />
-                      </div>
-                    </Field>
+                      </Field>
 
-                    <div className="flex items-end justify-end sm:justify-start">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-10 w-full text-zinc-500 hover:bg-red-500/10 hover:text-red-300 sm:h-9 sm:w-9"
-                        onClick={() => removeItem(index)}
-                        disabled={loading || analyzingReceipt}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <Field label="Price">
+                        <div className="relative">
+                          <DollarSign className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.price || ""}
+                            onChange={(event) =>
+                              updateItem(index, {
+                                price: event.target.value ? Number.parseFloat(event.target.value) : undefined,
+                              })
+                            }
+                            placeholder="0.00"
+                            className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
+                            disabled={loading || analyzingReceipt}
+                          />
+                        </div>
+                      </Field>
+
+                      <div className="flex items-end justify-end sm:justify-start">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-full text-zinc-500 hover:bg-red-500/10 hover:text-red-300 sm:h-9 sm:w-9"
+                          onClick={() => removeItem(index)}
+                          disabled={loading || analyzingReceipt}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </FormSection>
-
-        <FormSection title="Message">
-          <Textarea
-            id="receipt-notes"
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            placeholder="Add any notes about this receipt..."
-            rows={3}
-            className="rounded-xl border-zinc-800 bg-black text-sm text-zinc-100 placeholder:text-zinc-500"
-            disabled={loading}
-          />
-        </FormSection>
-
+                ))}
               </div>
-
-      <div className="shrink-0 border-t border-zinc-800 bg-black/95 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pt-1">
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {onCancel ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-              disabled={loading || analyzingReceipt}
-              className="w-full sm:w-auto"
-            >
-              Cancel
-            </Button>
-          ) : null}
-
-          <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Submitting...
-              </>
-            ) : analyzingReceipt ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              "Submit receipt"
             )}
-          </Button>
-                </div>
-      </div>
-    </form>
-  </div>
-)
+          </FormSection>
+
+          <FormSection title="Message">
+            <Textarea
+              id="receipt-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              placeholder="Add any notes about this receipt..."
+              rows={3}
+              className="rounded-xl border-zinc-800 bg-black text-sm text-zinc-100 placeholder:text-zinc-500"
+              disabled={loading}
+            />
+          </FormSection>
+        </div>
+
+        <div className="shrink-0 border-t border-zinc-800 bg-black/95 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pt-4">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            {onCancel ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onCancel}
+                disabled={loading || analyzingReceipt}
+                className="w-full sm:w-auto"
+              >
+                Cancel
+              </Button>
+            ) : null}
+
+            <Button type="submit" disabled={!canSubmit} className="w-full sm:w-auto">
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Submitting...
+                </>
+              ) : analyzingReceipt ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                "Submit receipt"
+              )}
+            </Button>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
 }
 
 function ReceiptView({
@@ -985,98 +1003,102 @@ function ReceiptView({
   vendorName: string
 }) {
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-4 px-1 sm:px-0">
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
-        <div className="mb-4 flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
-            <Receipt className="h-4 w-4 text-zinc-300" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
-            <p className="mt-1 text-xs text-zinc-500">Review saved receipt information.</p>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Detail label="Project" value={projectName || "No project"} />
-          <Detail label="Total" value={formatMoney(Number.parseFloat(totalPrice || "0"))} />
-          <Detail label="Category" value={formatCategory(category)} />
-          <Detail label="Vendor" value={vendorName || "No vendor"} />
-        </div>
-
-        {notes ? (
-          <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-3">
-            <div className="text-xs font-medium text-zinc-500">Message</div>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">{notes}</p>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
-        <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
-          {itemTotal > 0 ? (
-            <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span>
-          ) : null}
-        </div>
-
-        {itemsPurchased.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-zinc-800 bg-black p-4 text-center text-sm text-zinc-500">
-            No receipt items saved.
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {itemsPurchased.map((item, index) => (
-              <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
-                <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
-                <div className="mt-1 text-xs text-zinc-500">
-                  Qty {item.quantity || 1} • {formatMoney(Number(item.price || 0))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {initialData?.files?.length ? (
+    <div className="mx-auto flex max-h-[calc(100dvh-120px)] w-full max-w-3xl flex-col overflow-hidden px-1 sm:px-0">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 pb-4">
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
-          <h3 className="mb-3 text-sm font-semibold text-zinc-100">Receipt files</h3>
-          <div className="space-y-2">
-            {initialData.files.map((file, index) => {
-              if (!file.url) return null
-
-              const isImage = file.mimeType?.startsWith("image/")
-              const fileName = file.url.split("/").pop() || "receipt-file"
-
-              return (
-                <a
-                  key={`${file.url}-${index}`}
-                  href={file.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  download={fileName}
-                  className="block overflow-hidden rounded-xl border border-zinc-800 bg-black text-sm text-zinc-300 hover:bg-zinc-900"
-                >
-                  {isImage ? (
-                    <img src={file.url} alt="Receipt" className="max-h-72 w-full object-contain" />
-                  ) : (
-                    <div className="flex items-center gap-2 p-3">
-                      <File className="h-4 w-4" />
-                      <span className="min-w-0 flex-1 truncate">{fileName}</span>
-                      <span className="text-xs text-zinc-500">Open</span>
-                    </div>
-                  )}
-                </a>
-              )
-            })}
+          <div className="mb-4 flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-black">
+              <Receipt className="h-4 w-4 text-zinc-300" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100">Receipt details</h3>
+              <p className="mt-1 text-xs text-zinc-500">Review saved receipt information.</p>
+            </div>
           </div>
-        </section>
-      ) : null}
 
-      <div className="flex justify-end">
-        <Button type="button" onClick={onCancel} className="w-full sm:w-auto">
-          Close
-        </Button>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Detail label="Project" value={projectName || "No project"} />
+            <Detail label="Total" value={formatMoney(Number.parseFloat(totalPrice || "0"))} />
+            <Detail label="Category" value={formatCategory(category)} />
+            <Detail label="Vendor" value={vendorName || "No vendor"} />
+          </div>
+
+          {notes ? (
+            <div className="mt-4 rounded-xl border border-zinc-800 bg-black p-3">
+              <div className="text-xs font-medium text-zinc-500">Message</div>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">{notes}</p>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
+            {itemTotal > 0 ? (
+              <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span>
+            ) : null}
+          </div>
+
+          {itemsPurchased.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-black p-4 text-center text-sm text-zinc-500">
+              No receipt items saved.
+            </div>
+          ) : (
+            <div className="max-h-[260px] space-y-2 overflow-y-auto overscroll-contain pr-1">
+              {itemsPurchased.map((item, index) => (
+                <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
+                  <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
+                  <div className="mt-1 text-xs text-zinc-500">
+                    Qty {item.quantity || 1} • {formatMoney(Number(item.price || 0))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {initialData?.files?.length ? (
+          <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
+            <h3 className="mb-3 text-sm font-semibold text-zinc-100">Receipt files</h3>
+            <div className="max-h-72 space-y-2 overflow-y-auto overscroll-contain pr-1">
+              {initialData.files.map((file, index) => {
+                if (!file.url) return null
+
+                const isImage = file.mimeType?.startsWith("image/")
+                const fileName = file.url.split("/").pop() || "receipt-file"
+
+                return (
+                  <a
+                    key={`${file.url}-${index}`}
+                    href={file.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download={fileName}
+                    className="block overflow-hidden rounded-xl border border-zinc-800 bg-black text-sm text-zinc-300 hover:bg-zinc-900"
+                  >
+                    {isImage ? (
+                      <img src={file.url} alt="Receipt" className="max-h-64 w-full object-contain" />
+                    ) : (
+                      <div className="flex items-center gap-2 p-3">
+                        <File className="h-4 w-4" />
+                        <span className="min-w-0 flex-1 truncate">{fileName}</span>
+                        <span className="text-xs text-zinc-500">Open</span>
+                      </div>
+                    )}
+                  </a>
+                )
+              })}
+            </div>
+          </section>
+        ) : null}
+      </div>
+
+      <div className="shrink-0 border-t border-zinc-800 bg-black/95 p-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pt-4">
+        <div className="flex justify-end">
+          <Button type="button" onClick={onCancel} className="w-full sm:w-auto">
+            Close
+          </Button>
+        </div>
       </div>
     </div>
   )

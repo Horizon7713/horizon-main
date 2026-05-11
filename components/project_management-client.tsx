@@ -57,6 +57,100 @@ type Bid = {
   updated_at: string
 }
 
+type ProjectAttachment = {
+  id: string
+  type: string
+  file_url: string | null
+  mime_type: string | null
+  bundle_id: string | null
+  current_project: string | null
+  date_sent: string | null
+}
+
+function isImageAttachment(attachment: ProjectAttachment) {
+  return Boolean(attachment.mime_type?.startsWith("image/"))
+}
+
+function getAttachmentName(url: string | null) {
+  if (!url) return "Attachment"
+
+  try {
+    return decodeURIComponent(url.split("/").pop() || "Attachment")
+  } catch {
+    return url.split("/").pop() || "Attachment"
+  }
+}
+
+function groupAttachmentsByBundle(attachments: ProjectAttachment[]) {
+  return attachments.reduce<Record<string, ProjectAttachment[]>>((acc, attachment) => {
+    if (!attachment.bundle_id) return acc
+
+    if (!acc[attachment.bundle_id]) {
+      acc[attachment.bundle_id] = []
+    }
+
+    acc[attachment.bundle_id].push(attachment)
+
+    return acc
+  }, {})
+}
+
+function AttachmentPreviewGrid({
+  attachments,
+}: {
+  attachments: ProjectAttachment[]
+}) {
+  const visibleAttachments = attachments.filter((attachment) => attachment.file_url)
+
+  if (visibleAttachments.length === 0) return null
+
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {visibleAttachments.slice(0, 6).map((attachment) => {
+        const fileUrl = attachment.file_url as string
+        const fileName = getAttachmentName(fileUrl)
+        const isImage = isImageAttachment(attachment)
+
+        if (isImage) {
+          return (
+            <a
+              key={attachment.id}
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group overflow-hidden rounded-xl border border-zinc-800 bg-black"
+            >
+              <img
+                src={fileUrl}
+                alt={fileName}
+                className="h-28 w-full object-cover transition-transform group-hover:scale-105"
+              />
+            </a>
+          )
+        }
+
+        return (
+          <a
+            key={attachment.id}
+            href={fileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex h-28 items-center justify-center rounded-xl border border-zinc-800 bg-black px-3 text-center text-xs text-zinc-400 hover:border-zinc-700"
+          >
+            {attachment.mime_type === "application/pdf" ? "Open PDF" : "Open file"}
+          </a>
+        )
+      })}
+
+      {visibleAttachments.length > 6 ? (
+        <div className="flex h-28 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-xs text-zinc-400">
+          +{visibleAttachments.length - 6} more
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
 export function ProjectManagementClient() {
   const [projects, setProjects] = useState<Project[]>([])
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([])
