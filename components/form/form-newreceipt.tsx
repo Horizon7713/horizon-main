@@ -26,6 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { COST_CODES } from "@/lib/cost-codes"
 import { supabase } from "@/lib/supabase/client"
 
 interface Project {
@@ -40,12 +41,26 @@ interface ReceiptItem {
   name: string
   quantity?: number | null
   price?: number | null
+  cost_code?: string | null
+  cost_code_label?: string | null
+  cost_code_full_path?: string | null
+  cost_code_confirmed?: boolean
+  cost_code_ai_reason?: string | null
+  show_cost_code_picker?: boolean
 }
 
 interface ReceiptQualityAssessment {
   confidencePercentage: number
   imageQuality: "good" | "poor" | "unreadable"
   uncertainFields?: string[]
+}
+
+interface SuggestedCostCode {
+  code?: string | null
+  label?: string | null
+  fullPath?: string | null
+  confidence?: number | null
+  reason?: string | null
 }
 
 interface R2SignResponse {
@@ -71,7 +86,7 @@ interface FormNewReceiptProps {
     project: string
     projectName?: string
     notes: string
-    items: Array<{ name: string; quantity?: number | null; price?: number | null }>
+    items: ReceiptItem[]
     files: Array<{ url: string | null; mimeType: string | null }>
     category?: string
     vendorName?: string
@@ -113,6 +128,16 @@ function cleanMoneyInput(value: unknown) {
   return parsed.toFixed(2)
 }
 
+function toOptionalNumber(value: unknown) {
+  const cleaned = cleanMoneyInput(value)
+
+  if (!cleaned) return undefined
+
+  const parsed = Number(cleaned)
+
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 function formatCategory(value: string) {
   const match = RECEIPT_CATEGORIES.find((category) => category.value === value)
 
@@ -138,12 +163,23 @@ function getFileKey(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`
 }
 
+function findCostCodeByCode(code: string | null | undefined) {
+  if (!code) return null
+
+  return COST_CODES.find((costCode) => costCode.code === code) || null
+}
+
 function normalizeReceiptItems(items: ReceiptItem[]) {
   return items
     .map((item) => ({
       name: String(item.name || "").trim(),
       quantity: item.quantity ? Number(item.quantity) : 1,
       price: item.price ? Number(item.price) : 0,
+      cost_code: item.cost_code || null,
+      cost_code_label: item.cost_code_label || null,
+      cost_code_full_path: item.cost_code_full_path || null,
+      cost_code_confirmed: Boolean(item.cost_code_confirmed),
+      cost_code_ai_reason: item.cost_code_ai_reason || null,
     }))
     .filter((item) => item.name || item.price > 0)
 }
@@ -155,6 +191,19 @@ function getItemTotal(items: ReceiptItem[]) {
 
     return sum + quantity * price
   }, 0)
+}
+
+function getSuggestedCostCode(item: { suggested_cost_code?: SuggestedCostCode }) {
+  const suggestedCode = item.suggested_cost_code || {}
+
+  return {
+    cost_code: suggestedCode.code || null,
+    cost_code_label: suggestedCode.label || null,
+    cost_code_full_path: suggestedCode.fullPath || null,
+    cost_code_confirmed: false,
+    cost_code_ai_reason: suggestedCode.reason || null,
+    show_cost_code_picker: false,
+  }
 }
 
 export function FormNewReceipt({
@@ -191,7 +240,7 @@ export function FormNewReceipt({
     if (viewMode || loading || analyzingReceipt) return false
     if (!selectedProject) return false
 
-    const parsedTotal = Number.parseFloat(totalPrice)
+    const parsedTotal = Number.parseFloat(cleanMoneyInput(totalPrice))
 
     if (!Number.isFinite(parsedTotal) || parsedTotal <= 0) return false
 
@@ -264,7 +313,7 @@ export function FormNewReceipt({
   useEffect(() => {
     if (!viewMode || !initialData) return
 
-    setTotalPrice(initialData.totalPrice || "")
+    setTotalPrice(cleanMoneyInput(initialData.totalPrice || ""))
     setSelectedProject(initialData.project || "")
     setProjectName(initialData.projectName || "Unknown Project")
     setNotes(initialData.notes || "")
@@ -333,9 +382,7 @@ export function FormNewReceipt({
 
       const context = canvas.getContext("2d")
 
-      if (!context) {
-        return fileToBase64(file)
-      }
+      if (!context) return fileToBase64(file)
 
       context.drawImage(image, 0, 0, width, height)
 
@@ -379,6 +426,7 @@ export function FormNewReceipt({
       })
 
       const result = await response.json()
+      console.log("[Receipt AI Result]", result)
 
       if (!response.ok || !result.success || !result.data) {
         setError(String(result.error || "Could not automatically extract data from receipt."))
@@ -404,16 +452,22 @@ export function FormNewReceipt({
       }
 
       if (result.data.total_cost !== null && result.data.total_cost !== undefined) {
-  setTotalPrice(cleanMoneyInput(result.data.total_cost))
-}
+        setTotalPrice(cleanMoneyInput(result.data.total_cost))
+      }
 
       if (Array.isArray(result.data.items)) {
         setItemsPurchased(
-  result.data.items.map((item: ReceiptItem) => ({
-    name: item.name || "",
-    quantity: item.quantity ? Number(item.quantity) : undefined,
-    price: cleanMoneyInput(item.price) ? Number(cleanMoneyInput(item.price)) : undefined,
-  })),
+  result.data.items.map((item: ReceiptItem & { suggested_cost_code?: SuggestedCostCode }) => {
+    const suggested = getSuggestedCostCode(item)
+
+    return {
+      name: item.name || "",
+      quantity: item.quantity ? Number(item.quantity) : undefined,
+      price: toOptionalNumber(item.price),
+      ...suggested,
+      show_cost_code_picker: !suggested.cost_code,
+    }
+  }),
 )
       }
 
@@ -472,6 +526,12 @@ export function FormNewReceipt({
         name: "",
         quantity: 1,
         price: undefined,
+        cost_code: null,
+        cost_code_label: null,
+        cost_code_full_path: null,
+        cost_code_confirmed: false,
+        cost_code_ai_reason: null,
+        show_cost_code_picker: true,
       },
     ])
   }
@@ -488,6 +548,41 @@ export function FormNewReceipt({
       return updated
     })
   }
+
+  const confirmItemCostCode = (index: number) => {
+    updateItem(index, {
+      cost_code_confirmed: true,
+      show_cost_code_picker: false,
+    })
+  }
+
+  const rejectItemCostCode = (index: number) => {
+    updateItem(index, {
+      cost_code: null,
+      cost_code_label: null,
+      cost_code_full_path: null,
+      cost_code_confirmed: false,
+      cost_code_ai_reason: null,
+      show_cost_code_picker: true,
+    })
+  }
+
+  const selectItemCostCode = (index: number, selectedValue: string) => {
+  const selectedCode =
+    COST_CODES.find((costCode) => costCode.fullPath === selectedValue) ||
+    COST_CODES.find((costCode) => costCode.code === selectedValue)
+
+  if (!selectedCode) return
+
+  updateItem(index, {
+    cost_code: selectedCode.code,
+    cost_code_label: selectedCode.label,
+    cost_code_full_path: selectedCode.fullPath,
+    cost_code_confirmed: true,
+    cost_code_ai_reason: "Selected manually.",
+    show_cost_code_picker: false,
+  })
+}
 
   const removeItem = (index: number) => {
     setItemsPurchased((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
@@ -620,7 +715,6 @@ export function FormNewReceipt({
     try {
       const bundleId = crypto.randomUUID()
       const uploadedFileData = await uploadReceiptFilesToR2()
-
       const messageContent = notes.trim() || `Receipt submitted for ${formatMoney(receiptTotal)}`
 
       const formData = new FormData()
@@ -680,7 +774,7 @@ export function FormNewReceipt({
           {analyzingReceipt ? (
             <AlertCard
               title="Analyzing receipt"
-              message="Reading receipt image with faster server-side AI extraction..."
+              message="Reading receipt image, extracting items, and matching each item to a cost code..."
               tone="info"
               loading
             />
@@ -689,7 +783,7 @@ export function FormNewReceipt({
           {qualityAssessment && qualityAssessment.confidencePercentage >= 60 ? (
             <AlertCard
               title="Receipt analyzed"
-              message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence.`}
+              message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence. Review the item cost codes below.`}
               tone="success"
             />
           ) : null}
@@ -856,7 +950,7 @@ export function FormNewReceipt({
 
           <FormSection
             title="Items purchased"
-            description="AI extracted items stay inside this scroll box so the form does not stretch off screen."
+            description="Each item can keep its own AI-suggested cost code. Confirm the code or choose a better one."
             rightSlot={
               <Button
                 type="button"
@@ -876,7 +970,7 @@ export function FormNewReceipt({
                 No receipt items added.
               </div>
             ) : (
-              <div className="max-h-[260px] space-y-2 overflow-y-auto overscroll-contain pr-1">
+              <div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-1">
                 {itemsPurchased.map((item, index) => (
                   <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto] sm:gap-2">
@@ -941,6 +1035,16 @@ export function FormNewReceipt({
                         </Button>
                       </div>
                     </div>
+
+                    <ItemCostCodeReview
+                      disabled={loading || analyzingReceipt}
+                      item={item}
+                      index={index}
+                      onConfirm={confirmItemCostCode}
+                      onReject={rejectItemCostCode}
+                      onSelect={selectItemCostCode}
+                      onOpenPicker={(itemIndex) => updateItem(itemIndex, { show_cost_code_picker: true })}
+                    />
                   </div>
                 ))}
               </div>
@@ -992,6 +1096,133 @@ export function FormNewReceipt({
           </div>
         </div>
       </form>
+    </div>
+  )
+}
+
+function ItemCostCodeReview({
+  disabled,
+  item,
+  index,
+  onConfirm,
+  onReject,
+  onSelect,
+  onOpenPicker,
+}: {
+  disabled: boolean
+  item: ReceiptItem
+  index: number
+  onConfirm: (index: number) => void
+  onReject: (index: number) => void
+  onSelect: (index: number, code: string) => void
+  onOpenPicker: (index: number) => void
+}) {
+  if (item.show_cost_code_picker) {
+    return (
+      <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+        <div className="mb-2 text-xs font-semibold text-zinc-300">Choose cost code for this item</div>
+
+        <Select
+  value={item.cost_code_full_path || ""}
+  onValueChange={(value) => onSelect(index, value)}
+  disabled={disabled}
+>
+  <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
+    <SelectValue placeholder="Search/select a cost code" />
+  </SelectTrigger>
+
+  <SelectContent className="max-h-80">
+    {COST_CODES.map((costCode, costCodeIndex) => (
+      <SelectItem
+        key={`${costCode.code}-${costCodeIndex}-${costCode.fullPath}`}
+        value={costCode.fullPath}
+      >
+        {costCode.code} — {costCode.label}
+      </SelectItem>
+    ))}
+  </SelectContent>
+</Select>
+      </div>
+    )
+  }
+
+  if (!item.cost_code) {
+    return (
+      <div className="mt-3 rounded-xl border border-dashed border-zinc-800 bg-zinc-950 p-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <div className="text-xs font-semibold text-zinc-300">No cost code selected</div>
+            <div className="mt-1 text-xs text-zinc-500">Choose one before submitting if this item needs job costing.</div>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full border-zinc-800 bg-black text-xs text-zinc-300 hover:bg-zinc-900 sm:w-auto"
+            onClick={() => onOpenPicker(index)}
+            disabled={disabled}
+          >
+            Choose code
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`mt-3 rounded-xl border p-3 text-xs ${
+        item.cost_code_confirmed
+          ? "border-green-500/20 bg-green-500/10 text-green-100"
+          : "border-blue-500/20 bg-blue-500/10 text-blue-100"
+      }`}
+    >
+      <div className="font-semibold">
+        {item.cost_code_confirmed ? "Confirmed cost code" : "AI suggested cost code"}
+      </div>
+
+      <div className="mt-1 text-sm font-semibold text-zinc-100">
+        {item.cost_code} — {item.cost_code_label || "Cost code"}
+      </div>
+
+      {item.cost_code_full_path ? <div className="mt-1 text-xs opacity-80">{item.cost_code_full_path}</div> : null}
+
+      {item.cost_code_ai_reason ? <div className="mt-2 text-xs opacity-80">{item.cost_code_ai_reason}</div> : null}
+
+      {!item.cost_code_confirmed ? (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <Button type="button" size="sm" className="w-full sm:w-auto" onClick={() => onConfirm(index)} disabled={disabled}>
+            Yes, use this code
+          </Button>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full sm:w-auto"
+            onClick={() => onReject(index)}
+            disabled={disabled}
+          >
+            No, choose another
+          </Button>
+        </div>
+      ) : (
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <span className="text-xs font-medium text-green-200">Confirmed</span>
+
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="w-full border-green-500/20 bg-black/20 text-xs sm:w-auto"
+            onClick={() => onOpenPicker(index)}
+            disabled={disabled}
+          >
+            Change code
+          </Button>
+        </div>
+      )}
     </div>
   )
 }
@@ -1049,9 +1280,7 @@ function ReceiptView({
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
-            {itemTotal > 0 ? (
-              <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span>
-            ) : null}
+            {itemTotal > 0 ? <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span> : null}
           </div>
 
           {itemsPurchased.length === 0 ? (
@@ -1059,13 +1288,24 @@ function ReceiptView({
               No receipt items saved.
             </div>
           ) : (
-            <div className="max-h-[260px] space-y-2 overflow-y-auto overscroll-contain pr-1">
+            <div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-1">
               {itemsPurchased.map((item, index) => (
                 <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
                   <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
                   <div className="mt-1 text-xs text-zinc-500">
                     Qty {item.quantity || 1} • {formatMoney(Number(item.price || 0))}
                   </div>
+
+                  {item.cost_code ? (
+                    <div className="mt-3 rounded-lg border border-zinc-800 bg-zinc-950 p-2">
+                      <div className="text-xs font-semibold text-zinc-300">
+                        {item.cost_code} — {item.cost_code_label || "Cost code"}
+                      </div>
+                      {item.cost_code_full_path ? (
+                        <div className="mt-1 text-xs text-zinc-500">{item.cost_code_full_path}</div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1144,9 +1384,7 @@ function FormSection({
 
           <div className="min-w-0">
             <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
-            {description ? (
-              <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p>
-            ) : null}
+            {description ? <p className="mt-1 text-xs leading-relaxed text-zinc-500">{description}</p> : null}
           </div>
         </div>
 

@@ -18,6 +18,10 @@ const totalPrice = formData.get("totalPrice") as string
 const itemsPurchasedJson = formData.get("itemsPurchased") as string
 const category = formData.get("category") as string
 const vendorName = formData.get("vendorName") as string
+const costCode = formData.get("costCode") as string
+const costCodeLabel = formData.get("costCodeLabel") as string
+const costCodeConfirmed = formData.get("costCodeConfirmed") as string
+const costCodeAiReason = formData.get("costCodeAiReason") as string
 
   const originalContent = String(formData.get("originalContent") || content || "").trim()
   const originalLanguage = String(formData.get("originalLanguage") || "en")
@@ -153,6 +157,10 @@ const vendorName = formData.get("vendorName") as string
         message_bundle: bundleId,
         category: category || null,
         vender_name: vendorName || null,
+        cost_code: costCode || null,
+cost_code_label: costCodeLabel || null,
+cost_code_confirmed: costCodeConfirmed === "true",
+cost_code_ai_reason: costCodeAiReason || null,
       })
       .select("id")
       .single()
