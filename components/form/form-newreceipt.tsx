@@ -98,6 +98,21 @@ function formatMoney(value: number) {
   }).format(Number.isFinite(value) ? value : 0)
 }
 
+function cleanMoneyInput(value: unknown) {
+  if (value === null || value === undefined) return ""
+
+  const cleaned = String(value)
+    .replace(/,/g, "")
+    .replace(/[^0-9.-]/g, "")
+    .trim()
+
+  const parsed = Number.parseFloat(cleaned)
+
+  if (!Number.isFinite(parsed)) return ""
+
+  return parsed.toFixed(2)
+}
+
 function formatCategory(value: string) {
   const match = RECEIPT_CATEGORIES.find((category) => category.value === value)
 
@@ -389,17 +404,17 @@ export function FormNewReceipt({
       }
 
       if (result.data.total_cost !== null && result.data.total_cost !== undefined) {
-        setTotalPrice(String(result.data.total_cost))
-      }
+  setTotalPrice(cleanMoneyInput(result.data.total_cost))
+}
 
       if (Array.isArray(result.data.items)) {
         setItemsPurchased(
-          result.data.items.map((item: ReceiptItem) => ({
-            name: item.name || "",
-            quantity: item.quantity || undefined,
-            price: item.price || undefined,
-          })),
-        )
+  result.data.items.map((item: ReceiptItem) => ({
+    name: item.name || "",
+    quantity: item.quantity ? Number(item.quantity) : undefined,
+    price: cleanMoneyInput(item.price) ? Number(cleanMoneyInput(item.price)) : undefined,
+  })),
+)
       }
 
       if (result.data.category) {
@@ -587,7 +602,7 @@ export function FormNewReceipt({
       return
     }
 
-    const receiptTotal = Number.parseFloat(totalPrice)
+    const receiptTotal = Number.parseFloat(cleanMoneyInput(totalPrice))
 
     if (!Number.isFinite(receiptTotal) || receiptTotal <= 0) {
       setError("Please enter a valid total price.")
@@ -790,7 +805,7 @@ export function FormNewReceipt({
                     step="0.01"
                     min="0"
                     value={totalPrice}
-                    onChange={(event) => setTotalPrice(event.target.value)}
+                    onChange={(event) => setTotalPrice(event.target.value.replace(/,/g, ""))}
                     placeholder="0.00"
                     className="h-11 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
                     disabled={loading || analyzingReceipt}
