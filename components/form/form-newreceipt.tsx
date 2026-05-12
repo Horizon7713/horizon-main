@@ -767,7 +767,7 @@ export function FormNewReceipt({
 
   return (
     <div className="mx-auto flex h-[min(760px,calc(100dvh-120px))] w-full max-w-3xl flex-col overflow-hidden px-1 sm:px-0">
-      <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <form noValidate onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1 pb-4 sm:space-y-4">
           {error ? <AlertCard title="Receipt issue" message={error} tone="error" /> : null}
 
@@ -895,10 +895,9 @@ export function FormNewReceipt({
                 <div className="relative">
                   <DollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={totalPrice}
+  type="text"
+  inputMode="decimal"
+  value={totalPrice}
                     onChange={(event) => setTotalPrice(event.target.value.replace(/,/g, ""))}
                     placeholder="0.00"
                     className="h-11 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
@@ -987,15 +986,16 @@ export function FormNewReceipt({
 
                       <Field label="Qty">
                         <input
-                          type="number"
-                          min="0"
-                          step="1"
-                          value={item.quantity || ""}
+  type="text"
+  inputMode="decimal"
+  value={item.quantity || ""}
                           onChange={(event) =>
-                            updateItem(index, {
-                              quantity: event.target.value ? Number(event.target.value) : undefined,
-                            })
-                          }
+  updateItem(index, {
+    quantity: event.target.value
+      ? Number.parseFloat(event.target.value.replace(/,/g, ""))
+      : undefined,
+  })
+}
                           placeholder="1"
                           className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                           disabled={loading || analyzingReceipt}
@@ -1006,15 +1006,16 @@ export function FormNewReceipt({
                         <div className="relative">
                           <DollarSign className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
                           <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.price || ""}
+  type="text"
+  inputMode="decimal"
+  value={item.price || ""}
                             onChange={(event) =>
-                              updateItem(index, {
-                                price: event.target.value ? Number.parseFloat(event.target.value) : undefined,
-                              })
-                            }
+  updateItem(index, {
+    price: event.target.value
+      ? Number.parseFloat(cleanMoneyInput(event.target.value))
+      : undefined,
+  })
+}
                             placeholder="0.00"
                             className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                             disabled={loading || analyzingReceipt}
