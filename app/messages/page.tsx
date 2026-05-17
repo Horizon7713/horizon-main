@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { redirect } from 'next/navigation'
 import { MessagesClient } from "@/components/messages-client"
+import { getReceiptFolder, getReceiptPeriod } from "@/lib/receipt-periods"
 
 async function sendMessage(formData: FormData) {
   "use server"
@@ -22,6 +23,8 @@ const costCode = formData.get("costCode") as string
 const costCodeLabel = formData.get("costCodeLabel") as string
 const costCodeConfirmed = formData.get("costCodeConfirmed") as string
 const costCodeAiReason = formData.get("costCodeAiReason") as string
+const authCode = formData.get("authCode") as string
+const cardUsed = formData.get("cardUsed") as string
 
   const originalContent = String(formData.get("originalContent") || content || "").trim()
   const originalLanguage = String(formData.get("originalLanguage") || "en")
@@ -113,7 +116,7 @@ const costCodeAiReason = formData.get("costCodeAiReason") as string
 
   if (messageType === "media" && currentProject && fileData.length > 0) {
     const mediaEntries = fileData.map((file) => ({
-      project_id: currentProject,
+      project: currentProject,
       uploaded_by: userProfile.id,
       file_url: file.url,
       mime_type: file.mimeType,
@@ -135,7 +138,7 @@ const costCodeAiReason = formData.get("costCodeAiReason") as string
     uploaded_by: userProfile.id,
     work_type: progressUpdate,
     notes: content?.trim() || null,
-    project_id: currentProject,
+    project: currentProject,
     message_bundle: bundleId,
     duration_minutes: durationMinutes ? Number(durationMinutes) : null,
   })
@@ -147,23 +150,34 @@ const costCodeAiReason = formData.get("costCodeAiReason") as string
     }
   }
 
-  if (messageType === "receipt" && totalPrice && currentProject) {
-    const { data: receiptData, error: receiptError } = await supabase
-      .from("receipts")
-      .insert({
-        uploaded_by: userProfile.id,
-        total_price: Number.parseFloat(totalPrice),
-        project: currentProject,
-        message_bundle: bundleId,
-        category: category || null,
-        vender_name: vendorName || null,
-        cost_code: costCode || null,
-cost_code_label: costCodeLabel || null,
-cost_code_confirmed: costCodeConfirmed === "true",
-cost_code_ai_reason: costCodeAiReason || null,
-      })
-      .select("id")
-      .single()
+ if (messageType === "receipt" && totalPrice && currentProject) {
+  const receiptPeriod = getReceiptPeriod(new Date())
+  const receiptFolder = getReceiptFolder(vendorName, cardUsed)
+
+  const { data: receiptData, error: receiptError } = await supabase
+    .from("receipts")
+    .insert({
+      uploaded_by: userProfile.id,
+      total_price: Number.parseFloat(totalPrice),
+      project: currentProject,
+      message_bundle: bundleId,
+      category: category || null,
+      vender_name: vendorName || null,
+      auth_code: authCode || null,
+      card_used: cardUsed || null,
+      receipt_period_key: receiptPeriod.key,
+      receipt_period_label: receiptPeriod.label,
+      receipt_period_start: receiptPeriod.startDate,
+      receipt_period_end: receiptPeriod.endDate,
+      receipt_folder_key: receiptFolder.key,
+      receipt_folder_label: receiptFolder.label,
+      cost_code: costCode || null,
+      cost_code_label: costCodeLabel || null,
+      cost_code_confirmed: costCodeConfirmed === "true",
+      cost_code_ai_reason: costCodeAiReason || null,
+    })
+    .select("id")
+    .single()
 
     if (receiptError) {
       console.error("[v0] Error creating receipt entry:", receiptError)

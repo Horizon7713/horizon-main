@@ -220,6 +220,8 @@ export function FormNewReceipt({
   const [projectName, setProjectName] = useState("")
   const [category, setCategory] = useState("")
   const [vendorName, setVendorName] = useState("")
+  const [authCode, setAuthCode] = useState("")
+const [cardUsed, setCardUsed] = useState("")
   const [notes, setNotes] = useState("")
   const [totalPrice, setTotalPrice] = useState("")
   const [itemsPurchased, setItemsPurchased] = useState<ReceiptItem[]>([])
@@ -333,6 +335,8 @@ export function FormNewReceipt({
     setProjectName("")
     setCategory("")
     setVendorName("")
+    setAuthCode("")
+setCardUsed("")
     setNotes("")
     setTotalPrice("")
     setItemsPurchased([])
@@ -478,6 +482,14 @@ export function FormNewReceipt({
       if (result.data.vendor_name || result.data.merchant) {
         setVendorName(result.data.vendor_name || result.data.merchant)
       }
+
+      if (result.data.auth_code) {
+  setAuthCode(result.data.auth_code)
+}
+
+if (result.data.card_used) {
+  setCardUsed(result.data.card_used)
+}
 
       if (result.data.project_name) {
         setProjectName(result.data.project_name)
@@ -729,6 +741,8 @@ export function FormNewReceipt({
       formData.append("itemsPurchased", JSON.stringify(cleanItems))
       formData.append("category", category)
       formData.append("vendorName", vendorName.trim())
+      formData.append("authCode", authCode.trim())
+formData.append("cardUsed", cardUsed.trim())
 
       const result = await sendMessageAction(formData)
 
@@ -944,6 +958,27 @@ export function FormNewReceipt({
                   disabled={loading || analyzingReceipt}
                 />
               </Field>
+              <Field label="Auth code">
+  <input
+    type="text"
+    value={authCode}
+    onChange={(event) => setAuthCode(event.target.value)}
+    placeholder="e.g., 123456"
+    className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
+    disabled={loading || analyzingReceipt}
+  />
+</Field>
+
+<Field label="Card used">
+  <input
+    type="text"
+    value={cardUsed}
+    onChange={(event) => setCardUsed(event.target.value)}
+    placeholder="e.g., Visa 1234"
+    className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
+    disabled={loading || analyzingReceipt}
+  />
+</Field>
             </div>
           </FormSection>
 

@@ -13,6 +13,8 @@ type ReceiptAnalysisData = {
   total_cost: number | null
   vendor_name: string | null
   merchant: string | null
+  auth_code: string | null
+card_used: string | null
   category:
     | "lumber"
     | "concrete"
@@ -177,6 +179,8 @@ function normalizeAnalysisData(rawData: Record<string, unknown>): ReceiptAnalysi
     total_cost: toNumberOrNull(rawData.total_cost),
     vendor_name: toStringOrNull(rawData.vendor_name),
     merchant: toStringOrNull(rawData.merchant),
+    auth_code: toStringOrNull(rawData.auth_code),
+card_used: toStringOrNull(rawData.card_used),
     category: normalizeCategory(rawData.category),
     project_name: toStringOrNull(rawData.project_name),
     items: rawItems.map((rawItem) => {
@@ -232,6 +236,8 @@ export async function POST(request: Request) {
   "total_cost": number | null,
   "vendor_name": string | null,
   "merchant": string | null,
+  "auth_code": string | null,
+"card_used": string | null,
   "category": "lumber" | "concrete" | "finish" | "gas" | "framing" | "small_tool" | "equipment" | "plumbing" | "electrical" | "other" | null,
   "project_name": string | null,
   "items": [
@@ -279,6 +285,11 @@ ${costCodeContext}
 Receipt extraction rules:
 - total_cost should be the final receipt total, not subtotal, if visible.
 - vendor_name should be the store/vendor name.
+- Extract the receipt authorization code if visible. It may appear as AUTH CODE, AUTH, APPROVAL, APPR CODE, Authorization, or Approval Code.
+- Extract the card used if visible. Examples: Visa 1234, Mastercard 9876, Amex 1005, Discover 4421, Debit 1234.
+- Never return the full card number. Only return the card brand and last 4 digits when visible.
+- If only the last 4 digits are visible, return "Card ending 1234".
+- If no card information is visible, return null.
 - merchant can match vendor_name if there is not a separate merchant field.
 - confidencePercentage should represent confidence in the extracted receipt data.
 - imageQuality should be "unreadable" if the receipt cannot be read well enough.
