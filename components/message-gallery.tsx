@@ -113,22 +113,93 @@ export function MessageGallery({ currentUserId, selectedUserId, fetchMessagesAct
   const [downloadingFolderKey, setDownloadingFolderKey] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchAllMessages = async () => {
+  let refreshTimer: ReturnType<typeof setTimeout> | null = null
+
+  const fetchAllMessages = async (showLoading = false) => {
+    if (showLoading) {
       setIsLoading(true)
-
-      const result = await fetchMessagesAction(currentUserId, selectedUserId, true, 10000, 0)
-
-      if (result.error) {
-        console.error("[MessageGallery] Error fetching all messages:", result.error)
-      } else {
-        setAllMessages(result.messages)
-      }
-
-      setIsLoading(false)
     }
 
-    fetchAllMessages()
-  }, [currentUserId, selectedUserId, fetchMessagesAction])
+    const result = await fetchMessagesAction(currentUserId, selectedUserId, true, 10000, 0)
+
+    if (result.error) {
+      console.error("[MessageGallery] Error fetching all messages:", result.error)
+    } else {
+      setAllMessages(result.messages)
+    }
+
+    if (showLoading) {
+      setIsLoading(false)
+    }
+  }
+
+  const scheduleRefresh = () => {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer)
+    }
+
+    refreshTimer = setTimeout(() => {
+      fetchAllMessages(false)
+    }, 250)
+  }
+
+  fetchAllMessages(true)
+
+  const messagesChannel = supabase
+    .channel(`message-gallery-messages-${currentUserId}-${selectedUserId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "messages",
+      },
+      () => {
+        scheduleRefresh()
+      },
+    )
+    .subscribe()
+
+  const receiptsChannel = supabase
+    .channel(`message-gallery-receipts-${currentUserId}-${selectedUserId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "receipts",
+      },
+      () => {
+        scheduleRefresh()
+      },
+    )
+    .subscribe()
+
+  const receiptItemsChannel = supabase
+    .channel(`message-gallery-receipt-items-${currentUserId}-${selectedUserId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "*",
+        schema: "public",
+        table: "receipts_breakdown",
+      },
+      () => {
+        scheduleRefresh()
+      },
+    )
+    .subscribe()
+
+  return () => {
+    if (refreshTimer) {
+      clearTimeout(refreshTimer)
+    }
+
+    supabase.removeChannel(messagesChannel)
+    supabase.removeChannel(receiptsChannel)
+    supabase.removeChannel(receiptItemsChannel)
+  }
+}, [currentUserId, selectedUserId, fetchMessagesAction])
 
   useEffect(() => {
     const fetchProjects = async () => {
