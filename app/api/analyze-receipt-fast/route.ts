@@ -286,9 +286,12 @@ Receipt extraction rules:
 - total_cost should be the final receipt total, not subtotal, if visible.
 - vendor_name should be the store/vendor name.
 - Extract the receipt authorization code if visible. It may appear as AUTH CODE, AUTH, APPROVAL, APPR CODE, Authorization, or Approval Code.
-- Extract the card used if visible. Examples: Visa 1234, Mastercard 9876, Amex 1005, Discover 4421, Debit 1234.
+- Extract the card used only when the value is clearly tied to a payment card line.
+- Valid card lines may include VISA, Mastercard, Master Card, AMEX, American Express, Discover, Debit, Credit, Card, Account, Acct, Ending, Ends In, Last 4, or Last Four.
+- Return the card value as a normalized short label like "Visa 1234", "Mastercard 9876", "Amex 1005", "Discover 4421", "Debit 1234", or "Card ending 1234".
 - Never return the full card number. Only return the card brand and last 4 digits when visible.
-- If only the last 4 digits are visible, return "Card ending 1234".
+- Do not use AUTH CODE, APPROVAL CODE, APPR CODE, transaction number, terminal ID, invoice number, order number, merchant ID, store number, register number, reference number, or cashier number as the card used.
+- If the card last 4 is uncertain, return null.
 - If no card information is visible, return null.
 - merchant can match vendor_name if there is not a separate merchant field.
 - confidencePercentage should represent confidence in the extracted receipt data.

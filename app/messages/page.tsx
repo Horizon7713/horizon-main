@@ -153,6 +153,9 @@ const cardUsed = formData.get("cardUsed") as string
  if (messageType === "receipt" && totalPrice && currentProject) {
   const receiptPeriod = getReceiptPeriod(new Date())
   const receiptFolder = getReceiptFolder(vendorName, cardUsed)
+  const normalizedCardUsed = receiptFolder.cardLast4
+    ? `Card ending ${receiptFolder.cardLast4}`
+    : cardUsed || null
 
   const { data: receiptData, error: receiptError } = await supabase
     .from("receipts")
@@ -164,7 +167,11 @@ const cardUsed = formData.get("cardUsed") as string
       category: category || null,
       vender_name: vendorName || null,
       auth_code: authCode || null,
-      card_used: cardUsed || null,
+      card_used: normalizedCardUsed,
+      vendor_group_key: receiptFolder.vendorKey,
+      card_last4: receiptFolder.cardLast4,
+      card_confidence: receiptFolder.cardLast4 ? 100 : 0,
+      needs_card_review: receiptFolder.needsReview,
       receipt_period_key: receiptPeriod.key,
       receipt_period_label: receiptPeriod.label,
       receipt_period_start: receiptPeriod.startDate,

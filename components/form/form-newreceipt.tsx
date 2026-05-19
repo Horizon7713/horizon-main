@@ -138,6 +138,82 @@ function toOptionalNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+function normalizeDecimalText(value: string) {
+  return value.replace(/,/g, "").replace(/[^0-9.-]/g, "")
+}
+
+function normalizeCardUsedInput(value: unknown) {
+  const text = String(value || "").trim()
+
+  if (!text) return ""
+
+  const lower = text.toLowerCase()
+
+  const badKeywords = [
+    "auth",
+    "approval",
+    "appr",
+    "transaction",
+    "trans",
+    "terminal",
+    "term",
+    "invoice",
+    "order",
+    "merchant",
+    "store",
+    "register",
+    "reference",
+    "ref",
+  ]
+
+  const cardKeywords = [
+    "visa",
+    "mastercard",
+    "master card",
+    "amex",
+    "american express",
+    "discover",
+    "debit",
+    "credit",
+    "card",
+    "acct",
+    "account",
+    "ending",
+    "ends in",
+    "last 4",
+    "last four",
+  ]
+
+  const hasBadKeyword = badKeywords.some((keyword) => lower.includes(keyword))
+  const hasCardKeyword = cardKeywords.some((keyword) => lower.includes(keyword))
+
+  if (hasBadKeyword && !hasCardKeyword) return ""
+
+  const maskedMatch = text.match(/(?:\*|x|X|•){2,}[\s-]*(\d{4})\b/)
+  const endingMatch = text.match(/(?:ending|ends in|last\s*4|last\s*four|card)[^\d]*(\d{4})/i)
+  const allFourDigitMatches = text.match(/\b\d{4}\b/g) || []
+
+  const last4 =
+    maskedMatch?.[1] ||
+    endingMatch?.[1] ||
+    (hasCardKeyword && allFourDigitMatches.length > 0
+      ? allFourDigitMatches[allFourDigitMatches.length - 1]
+      : allFourDigitMatches.length === 1 && !hasBadKeyword
+        ? allFourDigitMatches[0]
+        : "")
+
+  if (!last4) return ""
+
+  if (/visa/i.test(text)) return `Visa ${last4}`
+  if (/mastercard|master card|\bmc\b/i.test(text)) return `Mastercard ${last4}`
+  if (/amex|american express/i.test(text)) return `Amex ${last4}`
+  if (/discover/i.test(text)) return `Discover ${last4}`
+  if (/debit/i.test(text)) return `Debit ${last4}`
+  if (/credit/i.test(text)) return `Credit card ${last4}`
+
+  return `Card ending ${last4}`
+}
+
 function formatCategory(value: string) {
   const match = RECEIPT_CATEGORIES.find((category) => category.value === value)
 
@@ -163,12 +239,6 @@ function getFileKey(file: File) {
   return `${file.name}-${file.size}-${file.lastModified}`
 }
 
-function findCostCodeByCode(code: string | null | undefined) {
-  if (!code) return null
-
-  return COST_CODES.find((costCode) => costCode.code === code) || null
-}
-
 function normalizeReceiptItems(items: ReceiptItem[]) {
   return items
     .map((item) => ({
@@ -184,15 +254,6 @@ function normalizeReceiptItems(items: ReceiptItem[]) {
     .filter((item) => item.name || item.price > 0)
 }
 
-function getItemTotal(items: ReceiptItem[]) {
-  return items.reduce((sum, item) => {
-    const quantity = Number(item.quantity || 1)
-    const price = Number(item.price || 0)
-
-    return sum + quantity * price
-  }, 0)
-}
-
 function getSuggestedCostCode(item: { suggested_cost_code?: SuggestedCostCode }) {
   const suggestedCode = item.suggested_cost_code || {}
 
@@ -203,6 +264,51 @@ function getSuggestedCostCode(item: { suggested_cost_code?: SuggestedCostCode })
     cost_code_confirmed: false,
     cost_code_ai_reason: suggestedCode.reason || null,
     show_cost_code_picker: false,
+  }
+}
+
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "")
+      resolve(dataUrl.split(",")[1] || "")
+    }
+
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type = "image/jpeg", quality = 0.72): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob), type, quality)
+  })
+}
+
+async function loadImageForCanvas(file: File) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(file, {
+        imageOrientation: "from-image",
+      })
+    } catch {
+      // Fall back to HTMLImageElement below.
+    }
+  }
+
+  const imageUrl = URL.createObjectURL(file)
+
+  try {
+    return await new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => resolve(img)
+      img.onerror = reject
+      img.src = imageUrl
+    })
+  } finally {
+    URL.revokeObjectURL(imageUrl)
   }
 }
 
@@ -221,7 +327,7 @@ export function FormNewReceipt({
   const [category, setCategory] = useState("")
   const [vendorName, setVendorName] = useState("")
   const [authCode, setAuthCode] = useState("")
-const [cardUsed, setCardUsed] = useState("")
+  const [cardUsed, setCardUsed] = useState("")
   const [notes, setNotes] = useState("")
   const [totalPrice, setTotalPrice] = useState("")
   const [itemsPurchased, setItemsPurchased] = useState<ReceiptItem[]>([])
@@ -234,9 +340,9 @@ const [cardUsed, setCardUsed] = useState("")
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+  const analysisAbortRef = useRef<AbortController | null>(null)
 
   const cleanItems = useMemo(() => normalizeReceiptItems(itemsPurchased), [itemsPurchased])
-  const itemTotal = useMemo(() => getItemTotal(itemsPurchased), [itemsPurchased])
 
   const canSubmit = useMemo(() => {
     if (viewMode || loading || analyzingReceipt) return false
@@ -270,6 +376,8 @@ const [cardUsed, setCardUsed] = useState("")
       return
     }
 
+    let isMounted = true
+
     async function fetchUserProjects() {
       try {
         const { data: userProfile, error: userError } = await supabase
@@ -295,20 +403,25 @@ const [cardUsed, setCardUsed] = useState("")
           return
         }
 
-        setProjects(data || [])
+        if (isMounted) setProjects(data || [])
       } catch (err) {
         console.error("[FormNewReceipt] Unexpected project fetch error:", err)
       } finally {
-        setLoadingProjects(false)
+        if (isMounted) setLoadingProjects(false)
       }
     }
 
     fetchUserProjects()
+
+    return () => {
+      isMounted = false
+    }
   }, [userId, viewMode])
 
   useEffect(() => {
     if (!selectedProject && projects.length > 0) {
       setSelectedProject(projects[0].id)
+      setProjectName(projects[0].name || "")
     }
   }, [projects, selectedProject])
 
@@ -324,19 +437,26 @@ const [cardUsed, setCardUsed] = useState("")
     setVendorName(initialData.vendorName || "")
   }, [initialData, viewMode])
 
+  useEffect(() => {
+    return () => {
+      analysisAbortRef.current?.abort()
+    }
+  }, [])
+
   const resetFileInputs = () => {
     if (fileInputRef.current) fileInputRef.current.value = ""
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
 
   const resetForm = () => {
+    analysisAbortRef.current?.abort()
     setSelectedFiles([])
     setSelectedProject(projects[0]?.id || "")
-    setProjectName("")
+    setProjectName(projects[0]?.name || "")
     setCategory("")
     setVendorName("")
     setAuthCode("")
-setCardUsed("")
+    setCardUsed("")
     setNotes("")
     setTotalPrice("")
     setItemsPurchased([])
@@ -345,56 +465,46 @@ setCardUsed("")
     resetFileInputs()
   }
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-
-      reader.onload = () => {
-        const base64 = reader.result as string
-        resolve(base64.split(",")[1] || "")
-      }
-
-      reader.onerror = reject
-      reader.readAsDataURL(file)
-    })
-  }
-
   const getOptimizedImageBase64 = async (file: File): Promise<string> => {
     if (!file.type.startsWith("image/")) {
-      return fileToBase64(file)
+      return blobToBase64(file)
     }
 
-    const maxSize = 1600
-    const quality = 0.82
-    const imageUrl = URL.createObjectURL(file)
+    const maxSize = 1200
+    const quality = 0.72
+    const image = await loadImageForCanvas(file)
 
     try {
-      const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const img = new Image()
-        img.onload = () => resolve(img)
-        img.onerror = reject
-        img.src = imageUrl
-      })
+      const sourceWidth = "width" in image ? image.width : 0
+      const sourceHeight = "height" in image ? image.height : 0
 
-      const scale = Math.min(1, maxSize / Math.max(image.width, image.height))
-      const width = Math.round(image.width * scale)
-      const height = Math.round(image.height * scale)
+      if (!sourceWidth || !sourceHeight) {
+        return blobToBase64(file)
+      }
+
+      const scale = Math.min(1, maxSize / Math.max(sourceWidth, sourceHeight))
+      const width = Math.max(1, Math.round(sourceWidth * scale))
+      const height = Math.max(1, Math.round(sourceHeight * scale))
 
       const canvas = document.createElement("canvas")
       canvas.width = width
       canvas.height = height
 
-      const context = canvas.getContext("2d")
+      const context = canvas.getContext("2d", { alpha: false })
 
-      if (!context) return fileToBase64(file)
+      if (!context) return blobToBase64(file)
 
       context.drawImage(image, 0, 0, width, height)
 
-      const dataUrl = canvas.toDataURL("image/jpeg", quality)
+      const optimizedBlob = await canvasToBlob(canvas, "image/jpeg", quality)
 
-      return dataUrl.split(",")[1] || ""
+      if (!optimizedBlob) return blobToBase64(file)
+
+      return blobToBase64(optimizedBlob)
     } finally {
-      URL.revokeObjectURL(imageUrl)
+      if ("close" in image && typeof image.close === "function") {
+        image.close()
+      }
     }
   }
 
@@ -404,6 +514,11 @@ setCardUsed("")
   }
 
   const analyzeReceiptImage = async (file: File) => {
+    analysisAbortRef.current?.abort()
+
+    const controller = new AbortController()
+    analysisAbortRef.current = controller
+
     try {
       setAnalyzingReceipt(true)
       setError(null)
@@ -418,6 +533,8 @@ setCardUsed("")
 
       const base64 = await getOptimizedImageBase64(file)
 
+      if (controller.signal.aborted) return
+
       const response = await fetch("/api/analyze-receipt-fast", {
         method: "POST",
         headers: {
@@ -427,10 +544,13 @@ setCardUsed("")
           imageBase64: base64,
           mimeType: "image/jpeg",
         }),
+        signal: controller.signal,
       })
 
       const result = await response.json()
       console.log("[Receipt AI Result]", result)
+
+      if (controller.signal.aborted) return
 
       if (!response.ok || !result.success || !result.data) {
         setError(String(result.error || "Could not automatically extract data from receipt."))
@@ -461,18 +581,18 @@ setCardUsed("")
 
       if (Array.isArray(result.data.items)) {
         setItemsPurchased(
-  result.data.items.map((item: ReceiptItem & { suggested_cost_code?: SuggestedCostCode }) => {
-    const suggested = getSuggestedCostCode(item)
+          result.data.items.slice(0, 8).map((item: ReceiptItem & { suggested_cost_code?: SuggestedCostCode }) => {
+            const suggested = getSuggestedCostCode(item)
 
-    return {
-      name: item.name || "",
-      quantity: item.quantity ? Number(item.quantity) : undefined,
-      price: toOptionalNumber(item.price),
-      ...suggested,
-      show_cost_code_picker: !suggested.cost_code,
-    }
-  }),
-)
+            return {
+              name: item.name || "",
+              quantity: item.quantity ? Number(item.quantity) : undefined,
+              price: toOptionalNumber(item.price),
+              ...suggested,
+              show_cost_code_picker: !suggested.cost_code,
+            }
+          }),
+        )
       }
 
       if (result.data.category) {
@@ -484,22 +604,26 @@ setCardUsed("")
       }
 
       if (result.data.auth_code) {
-  setAuthCode(result.data.auth_code)
-}
+        setAuthCode(result.data.auth_code)
+      }
 
-if (result.data.card_used) {
-  setCardUsed(result.data.card_used)
-}
+      const normalizedCardUsed = normalizeCardUsedInput(result.data.card_used)
+      setCardUsed(normalizedCardUsed)
 
       if (result.data.project_name) {
         setProjectName(result.data.project_name)
       }
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return
+
       console.error("[FormNewReceipt] Error analyzing receipt:", err)
       setError(err instanceof Error ? err.message : "Failed to analyze receipt. Please try again.")
       clearFailedReceiptFile()
     } finally {
-      setAnalyzingReceipt(false)
+      if (analysisAbortRef.current === controller) {
+        setAnalyzingReceipt(false)
+        analysisAbortRef.current = null
+      }
     }
   }
 
@@ -580,21 +704,21 @@ if (result.data.card_used) {
   }
 
   const selectItemCostCode = (index: number, selectedValue: string) => {
-  const selectedCode =
-    COST_CODES.find((costCode) => costCode.fullPath === selectedValue) ||
-    COST_CODES.find((costCode) => costCode.code === selectedValue)
+    const selectedCode =
+      COST_CODES.find((costCode) => costCode.fullPath === selectedValue) ||
+      COST_CODES.find((costCode) => costCode.code === selectedValue)
 
-  if (!selectedCode) return
+    if (!selectedCode) return
 
-  updateItem(index, {
-    cost_code: selectedCode.code,
-    cost_code_label: selectedCode.label,
-    cost_code_full_path: selectedCode.fullPath,
-    cost_code_confirmed: true,
-    cost_code_ai_reason: "Selected manually.",
-    show_cost_code_picker: false,
-  })
-}
+    updateItem(index, {
+      cost_code: selectedCode.code,
+      cost_code_label: selectedCode.label,
+      cost_code_full_path: selectedCode.fullPath,
+      cost_code_confirmed: true,
+      cost_code_ai_reason: "Selected manually.",
+      show_cost_code_picker: false,
+    })
+  }
 
   const removeItem = (index: number) => {
     setItemsPurchased((previous) => previous.filter((_, itemIndex) => itemIndex !== index))
@@ -705,7 +829,7 @@ if (result.data.card_used) {
     event.preventDefault()
 
     if (!selectedProject) {
-      setError("Please select a project.")
+      setError("Please select a job/project.")
       return
     }
 
@@ -728,6 +852,7 @@ if (result.data.card_used) {
       const bundleId = crypto.randomUUID()
       const uploadedFileData = await uploadReceiptFilesToR2()
       const messageContent = notes.trim() || `Receipt submitted for ${formatMoney(receiptTotal)}`
+      const normalizedCardUsed = normalizeCardUsedInput(cardUsed) || cardUsed.trim()
 
       const formData = new FormData()
       formData.append("content", messageContent)
@@ -742,7 +867,7 @@ if (result.data.card_used) {
       formData.append("category", category)
       formData.append("vendorName", vendorName.trim())
       formData.append("authCode", authCode.trim())
-formData.append("cardUsed", cardUsed.trim())
+      formData.append("cardUsed", normalizedCardUsed)
 
       const result = await sendMessageAction(formData)
 
@@ -768,7 +893,6 @@ formData.append("cardUsed", cardUsed.trim())
       <ReceiptView
         category={category}
         initialData={initialData}
-        itemTotal={itemTotal}
         itemsPurchased={itemsPurchased}
         notes={notes}
         onCancel={onCancel}
@@ -788,7 +912,7 @@ formData.append("cardUsed", cardUsed.trim())
           {analyzingReceipt ? (
             <AlertCard
               title="Analyzing receipt"
-              message="Reading receipt image, extracting items, and matching each item to a cost code..."
+              message="Reading receipt image and filling the receipt fields..."
               tone="info"
               loading
             />
@@ -797,7 +921,7 @@ formData.append("cardUsed", cardUsed.trim())
           {qualityAssessment && qualityAssessment.confidencePercentage >= 60 ? (
             <AlertCard
               title="Receipt analyzed"
-              message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence. Review the item cost codes below.`}
+              message={`Extracted with ${qualityAssessment.confidencePercentage}% confidence. Review the receipt before submitting.`}
               tone="success"
             />
           ) : null}
@@ -805,7 +929,7 @@ formData.append("cardUsed", cardUsed.trim())
           <FormSection
             icon={<Receipt className="h-4 w-4 text-zinc-300" />}
             title="Receipt capture"
-            description="Upload a receipt or take a photo. Images are resized for fast AI extraction, then saved to Cloudflare R2."
+            description="Upload a receipt or take a photo. Images are compressed for fast AI extraction, then the original file is saved to Cloudflare R2 when submitted."
           >
             <input
               ref={fileInputRef}
@@ -879,22 +1003,24 @@ formData.append("cardUsed", cardUsed.trim())
 
           <FormSection
             title="Receipt details"
-            description="Confirm the project, vendor, category, and total before submitting."
-            rightSlot={
-              itemTotal > 0 ? (
-                <div className="rounded-xl border border-zinc-800 bg-black px-3 py-2 text-left sm:text-right">
-                  <div className="text-[10px] uppercase tracking-wide text-zinc-500">Item total</div>
-                  <div className="text-sm font-semibold text-zinc-100">{formatMoney(itemTotal)}</div>
-                </div>
-              ) : null
-            }
+            description="Assign this receipt to a job/project, then confirm the vendor, category, and final receipt total."
           >
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Project">
-                <Select value={selectedProject} onValueChange={setSelectedProject} disabled={loading || loadingProjects}>
+              <Field label="Job / Project">
+                <Select
+                  value={selectedProject}
+                  onValueChange={(value) => {
+                    setSelectedProject(value)
+
+                    const selected = projects.find((project) => project.id === value)
+                    setProjectName(selected?.name || "")
+                  }}
+                  disabled={loading || loadingProjects}
+                >
                   <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
-                    <SelectValue placeholder={loadingProjects ? "Loading..." : "Select project"} />
+                    <SelectValue placeholder={loadingProjects ? "Loading jobs..." : "Select job/project"} />
                   </SelectTrigger>
+
                   <SelectContent>
                     {projects.map((project) => (
                       <SelectItem key={project.id} value={project.id}>
@@ -909,28 +1035,16 @@ formData.append("cardUsed", cardUsed.trim())
                 <div className="relative">
                   <DollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
                   <input
-  type="text"
-  inputMode="decimal"
-  value={totalPrice}
-                    onChange={(event) => setTotalPrice(event.target.value.replace(/,/g, ""))}
+                    type="text"
+                    inputMode="decimal"
+                    value={totalPrice}
+                    onChange={(event) => setTotalPrice(normalizeDecimalText(event.target.value))}
+                    onBlur={(event) => setTotalPrice(cleanMoneyInput(event.target.value) || event.target.value)}
                     placeholder="0.00"
                     className="h-11 w-full rounded-xl border border-zinc-800 bg-black pl-9 pr-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
                     disabled={loading || analyzingReceipt}
                   />
                 </div>
-
-                {itemTotal > 0 ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 px-0 text-xs text-zinc-400 hover:text-zinc-100"
-                    onClick={() => setTotalPrice(itemTotal.toFixed(2))}
-                    disabled={loading}
-                  >
-                    Use item total: {formatMoney(itemTotal)}
-                  </Button>
-                ) : null}
               </Field>
 
               <Field label="Category">
@@ -958,33 +1072,35 @@ formData.append("cardUsed", cardUsed.trim())
                   disabled={loading || analyzingReceipt}
                 />
               </Field>
-              <Field label="Auth code">
-  <input
-    type="text"
-    value={authCode}
-    onChange={(event) => setAuthCode(event.target.value)}
-    placeholder="e.g., 123456"
-    className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
-    disabled={loading || analyzingReceipt}
-  />
-</Field>
 
-<Field label="Card used">
-  <input
-    type="text"
-    value={cardUsed}
-    onChange={(event) => setCardUsed(event.target.value)}
-    placeholder="e.g., Visa 1234"
-    className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
-    disabled={loading || analyzingReceipt}
-  />
-</Field>
+              <Field label="Auth code">
+                <input
+                  type="text"
+                  value={authCode}
+                  onChange={(event) => setAuthCode(event.target.value)}
+                  placeholder="e.g., 123456"
+                  className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
+                  disabled={loading || analyzingReceipt}
+                />
+              </Field>
+
+              <Field label="Card used">
+                <input
+                  type="text"
+                  value={cardUsed}
+                  onChange={(event) => setCardUsed(event.target.value)}
+                  onBlur={(event) => setCardUsed(normalizeCardUsedInput(event.target.value) || event.target.value)}
+                  placeholder="e.g., Visa 1234"
+                  className="h-11 w-full rounded-xl border border-zinc-800 bg-black px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-10"
+                  disabled={loading || analyzingReceipt}
+                />
+              </Field>
             </div>
           </FormSection>
 
           <FormSection
             title="Items purchased"
-            description="Each item can keep its own AI-suggested cost code. Confirm the code or choose a better one."
+            description="Review the main extracted items. Item totals are not used as the receipt total."
             rightSlot={
               <Button
                 type="button"
@@ -1004,7 +1120,7 @@ formData.append("cardUsed", cardUsed.trim())
                 No receipt items added.
               </div>
             ) : (
-              <div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-1">
+              <div className="max-h-[300px] space-y-2 overflow-y-auto overscroll-contain pr-1">
                 {itemsPurchased.map((item, index) => (
                   <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
                     <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_90px_120px_auto] sm:gap-2">
@@ -1021,16 +1137,16 @@ formData.append("cardUsed", cardUsed.trim())
 
                       <Field label="Qty">
                         <input
-  type="text"
-  inputMode="decimal"
-  value={item.quantity || ""}
+                          type="text"
+                          inputMode="decimal"
+                          value={item.quantity || ""}
                           onChange={(event) =>
-  updateItem(index, {
-    quantity: event.target.value
-      ? Number.parseFloat(event.target.value.replace(/,/g, ""))
-      : undefined,
-  })
-}
+                            updateItem(index, {
+                              quantity: event.target.value
+                                ? Number.parseFloat(normalizeDecimalText(event.target.value))
+                                : undefined,
+                            })
+                          }
                           placeholder="1"
                           className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                           disabled={loading || analyzingReceipt}
@@ -1041,16 +1157,14 @@ formData.append("cardUsed", cardUsed.trim())
                         <div className="relative">
                           <DollarSign className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
                           <input
-  type="text"
-  inputMode="decimal"
-  value={item.price || ""}
+                            type="text"
+                            inputMode="decimal"
+                            value={item.price || ""}
                             onChange={(event) =>
-  updateItem(index, {
-    price: event.target.value
-      ? Number.parseFloat(cleanMoneyInput(event.target.value))
-      : undefined,
-  })
-}
+                              updateItem(index, {
+                                price: event.target.value ? Number.parseFloat(cleanMoneyInput(event.target.value)) : undefined,
+                              })
+                            }
                             placeholder="0.00"
                             className="h-11 w-full rounded-lg border border-zinc-800 bg-zinc-950 pl-7 pr-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-500 focus:border-zinc-700 sm:h-9"
                             disabled={loading || analyzingReceipt}
@@ -1158,26 +1272,22 @@ function ItemCostCodeReview({
       <div className="mt-3 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
         <div className="mb-2 text-xs font-semibold text-zinc-300">Choose cost code for this item</div>
 
-        <Select
-  value={item.cost_code_full_path || ""}
-  onValueChange={(value) => onSelect(index, value)}
-  disabled={disabled}
->
-  <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
-    <SelectValue placeholder="Search/select a cost code" />
-  </SelectTrigger>
+        <Select value={item.cost_code_full_path || ""} onValueChange={(value) => onSelect(index, value)} disabled={disabled}>
+          <SelectTrigger className="h-11 rounded-xl border-zinc-800 bg-black text-sm sm:h-10">
+            <SelectValue placeholder="Search/select a cost code" />
+          </SelectTrigger>
 
-  <SelectContent className="max-h-80">
-    {COST_CODES.map((costCode, costCodeIndex) => (
-      <SelectItem
-        key={`${costCode.code}-${costCodeIndex}-${costCode.fullPath}`}
-        value={costCode.fullPath}
-      >
-        {costCode.code} — {costCode.label}
-      </SelectItem>
-    ))}
-  </SelectContent>
-</Select>
+          <SelectContent className="max-h-80">
+            {COST_CODES.map((costCode, costCodeIndex) => (
+              <SelectItem
+                key={`${costCode.code}-${costCodeIndex}-${costCode.fullPath}`}
+                value={costCode.fullPath}
+              >
+                {costCode.code} — {costCode.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
     )
   }
@@ -1214,9 +1324,7 @@ function ItemCostCodeReview({
           : "border-blue-500/20 bg-blue-500/10 text-blue-100"
       }`}
     >
-      <div className="font-semibold">
-        {item.cost_code_confirmed ? "Confirmed cost code" : "AI suggested cost code"}
-      </div>
+      <div className="font-semibold">{item.cost_code_confirmed ? "Confirmed cost code" : "AI suggested cost code"}</div>
 
       <div className="mt-1 text-sm font-semibold text-zinc-100">
         {item.cost_code} — {item.cost_code_label || "Cost code"}
@@ -1266,7 +1374,6 @@ function ItemCostCodeReview({
 function ReceiptView({
   category,
   initialData,
-  itemTotal,
   itemsPurchased,
   notes,
   onCancel,
@@ -1276,7 +1383,6 @@ function ReceiptView({
 }: {
   category: string
   initialData?: FormNewReceiptProps["initialData"]
-  itemTotal: number
   itemsPurchased: ReceiptItem[]
   notes: string
   onCancel?: () => void
@@ -1316,7 +1422,6 @@ function ReceiptView({
         <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3 sm:p-4">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold text-zinc-100">Items purchased</h3>
-            {itemTotal > 0 ? <span className="text-xs font-medium text-zinc-400">{formatMoney(itemTotal)}</span> : null}
           </div>
 
           {itemsPurchased.length === 0 ? (
@@ -1324,7 +1429,7 @@ function ReceiptView({
               No receipt items saved.
             </div>
           ) : (
-            <div className="max-h-[360px] space-y-2 overflow-y-auto overscroll-contain pr-1">
+            <div className="max-h-[300px] space-y-2 overflow-y-auto overscroll-contain pr-1">
               {itemsPurchased.map((item, index) => (
                 <div key={index} className="rounded-xl border border-zinc-800 bg-black p-3">
                   <div className="text-sm font-medium text-zinc-100">{item.name || "Unnamed item"}</div>
@@ -1494,4 +1599,5 @@ function AlertCard({
     </div>
   )
 }
+
 
